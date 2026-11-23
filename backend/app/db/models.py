@@ -310,3 +310,94 @@ class Report(Base):
     narrative: Mapped[dict | None] = mapped_column(JSON)
     # not_requested | generated | failed | not_configured
     narrative_status: Mapped[str] = mapped_column(String(20), default="not_requested")
+
+
+# ============================================================================
+# Market research (Phase 5) -- separate from business data. Paper trading is
+# SIMULATED and lives in its own schema; it is never mixed with revenue.
+# ============================================================================
+
+
+class MarketCache(Base):
+    """Provider responses with provenance (source + retrieval time)."""
+
+    __tablename__ = "cache"
+    __table_args__ = {"schema": "market"}
+
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)  # e.g. "bars:AAPL"
+    source: Mapped[str] = mapped_column(String(30))
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    payload: Mapped[dict | list] = mapped_column(JSON)
+
+
+class Watchlist(Base):
+    __tablename__ = "watchlists"
+    __table_args__ = {"schema": "market"}
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(60), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class WatchlistItem(Base):
+    __tablename__ = "watchlist_items"
+    __table_args__ = (
+        UniqueConstraint("watchlist_id", "symbol", name="uq_watch_item"),
+        {"schema": "market"},
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    watchlist_id: Mapped[int] = mapped_column(index=True)
+    symbol: Mapped[str] = mapped_column(String(12))
+    note: Mapped[str | None] = mapped_column(Text)
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ResearchReport(Base):
+    __tablename__ = "research_reports"
+    __table_args__ = {"schema": "market"}
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(12), index=True)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    snapshot: Mapped[dict] = mapped_column(JSON)  # the data the report was built from
+    ai: Mapped[dict | None] = mapped_column(JSON)  # verified AI sections, if requested
+
+
+class PaperAccount(Base):
+    """SIMULATED account. Virtual cash only; no brokerage connection exists."""
+
+    __tablename__ = "accounts"
+    __table_args__ = (
+        CheckConstraint("starting_cash > 0", name="ck_paper_start"),
+        {"schema": "paper"},
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(60), unique=True)
+    starting_cash: Mapped[Decimal] = mapped_column(Numeric(16, 2))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PaperTrade(Base):
+    """SIMULATED fill at a recorded market price (source + price date kept)."""
+
+    __tablename__ = "trades"
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="ck_paper_qty"),
+        CheckConstraint("price > 0", name="ck_paper_price"),
+        {"schema": "paper"},
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(index=True)
+    symbol: Mapped[str] = mapped_column(String(12), index=True)
+    side: Mapped[str] = mapped_column(String(4))  # buy | sell
+    quantity: Mapped[Decimal] = mapped_column(Numeric(18, 6))
+    price: Mapped[Decimal] = mapped_column(Numeric(16, 4))
+    price_source: Mapped[str] = mapped_column(String(80))  # e.g. "massive close 2026-11-20"
+    executed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    thesis: Mapped[str | None] = mapped_column(Text)  # trade journal
+    lesson: Mapped[str | None] = mapped_column(Text)
