@@ -40,6 +40,7 @@ log = logging.getLogger(__name__)
 
 ADVISORY_LOCK_KEY = 0x41544C53  # "ATLS"
 ORDERS_WATERMARK_KEY = "shopify.orders.updated_at_watermark"
+SHOP_INFO_KEY = "shopify.shop"
 WATERMARK_OVERLAP = timedelta(minutes=10)  # re-read a margin to absorb clock skew
 
 
@@ -123,6 +124,7 @@ class ShopifySync:
                 return report
             try:
                 for resource, fn in (
+                    ("shop", self.sync_shop),
                     ("locations", self.sync_locations),
                     ("products", self.sync_products),
                     ("variants_inventory", self.sync_variants),
@@ -138,6 +140,30 @@ class ShopifySync:
         return report
 
     # ------------------------------------------------------------- resources
+    async def sync_shop(self) -> int:
+        """Store shop name, currency, timezone and granted scopes (used by analytics)."""
+        data = await self._client.query(Q.SHOP)
+        shop = data.get("shop") or {}
+        for key in ("name", "currencyCode", "ianaTimezone"):
+            if not shop.get(key):
+                raise N.MalformedShopifyData(f"Shop response missing '{key}'")
+        scopes = sorted(
+            s["handle"]
+            for s in ((data.get("currentAppInstallation") or {}).get("accessScopes") or [])
+            if isinstance(s, dict) and s.get("handle")
+        )
+        value = {
+            "name": shop["name"],
+            "currency": shop["currencyCode"],
+            "timezone": shop["ianaTimezone"],
+            "scopes": scopes,
+            "synced_at": datetime.now(UTC).isoformat(),
+        }
+        with self._session_factory() as s:
+            _upsert(s, AppSetting, [{"key": SHOP_INFO_KEY, "value": value}], ["key"])
+            s.commit()
+        return 1
+
     async def sync_locations(self) -> int:
         return await self._full_sync(
             Q.LOCATIONS, ["locations"], 100, ShopifyLocation, N.location_row

@@ -1,11 +1,9 @@
 """Sync integration tests against the isolated `atlas_test` database (FIXTURE data only)."""
 
-import os
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import create_engine, select, text
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import select, text
 
 from app.db.models import (
     AppSetting,
@@ -21,59 +19,10 @@ from app.db.models import (
 from app.providers.shopify import normalize as N
 from app.providers.shopify import queries as Q
 from app.services.shopify_sync import ADVISORY_LOCK_KEY, ORDERS_WATERMARK_KEY, ShopifySync
+from tests.conftest import requires_test_db
 from tests.shopify_fixtures import FakeShopify, line, money, order, product, variant
 
-TEST_DB_URL = os.environ.get(
-    "ATLAS_TEST_DATABASE_URL",
-    "postgresql+psycopg://atlas:atlas_dev_local@localhost:5432/atlas_test",
-)
-
-
-def _available() -> bool:
-    try:
-        with create_engine(TEST_DB_URL).connect() as c:
-            c.execute(text("SELECT 1"))
-        return True
-    except Exception:
-        return False
-
-
-pytestmark = pytest.mark.skipif(not _available(), reason="atlas_test database not reachable")
-
-
-@pytest.fixture(scope="module")
-def engine():
-    from alembic import command
-    from alembic.config import Config
-
-    from app.core import config as cfg
-
-    os.environ["DATABASE_URL"] = TEST_DB_URL
-    cfg.get_settings.cache_clear()
-    alembic_cfg = Config(os.path.join(os.path.dirname(__file__), "..", "alembic.ini"))
-    alembic_cfg.set_main_option(
-        "script_location", os.path.join(os.path.dirname(__file__), "..", "migrations")
-    )
-    command.downgrade(alembic_cfg, "base")
-    command.upgrade(alembic_cfg, "head")
-    del os.environ["DATABASE_URL"]
-    cfg.get_settings.cache_clear()
-    eng = create_engine(TEST_DB_URL)
-    yield eng
-    eng.dispose()
-
-
-@pytest.fixture
-def factory(engine):
-    with engine.begin() as c:
-        c.execute(
-            text(
-                "TRUNCATE shopify.products, shopify.variants, shopify.locations, "
-                "shopify.inventory_levels, shopify.orders, shopify.order_lines, shopify.refunds, "
-                "shopify.refund_lines, core.sync_runs, core.app_settings RESTART IDENTITY"
-            )
-        )
-    return sessionmaker(bind=engine, expire_on_commit=False)
+pytestmark = requires_test_db
 
 
 def _fake(**kw) -> FakeShopify:
@@ -105,12 +54,16 @@ async def test_full_sync_with_pagination(factory) -> None:
         assert o.total_price == Decimal("48.18") and o.total_shipping == Decimal("5.00")
         runs = s.scalars(select(SyncRun)).all()
         assert {r.resource for r in runs} == {
+            "shop",
             "locations",
             "products",
             "variants_inventory",
             "orders",
         }
         assert all(r.status == SyncStatus.SUCCEEDED and r.finished_at for r in runs)
+        shop = s.get(AppSetting, "shopify.shop").value
+        assert shop["timezone"] == "America/Chicago" and shop["currency"] == "USD"
+        assert shop["scopes"] == ["read_orders", "read_products"]
 
 
 async def test_sync_is_idempotent(factory) -> None:

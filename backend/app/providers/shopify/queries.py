@@ -10,6 +10,13 @@ Shopify's 1,000-point single-query limit:
 No customer fields are requested anywhere.
 """
 
+SHOP = """
+query AtlasShop {
+  shop { name currencyCode ianaTimezone }
+  currentAppInstallation { accessScopes { handle } }
+}
+"""
+
 PRODUCTS = """
 query AtlasProducts($first: Int!, $after: String) {
   products(first: $first, after: $after, sortKey: ID) {

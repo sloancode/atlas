@@ -99,7 +99,13 @@ class CostInput(Base):
 
     __tablename__ = "cost_inputs"
     __table_args__ = (
-        UniqueConstraint("variant_gid", "cost_type", "basis", name="uq_cost_input"),
+        UniqueConstraint(
+            "variant_gid",
+            "cost_type",
+            "basis",
+            name="uq_cost_input",
+            postgresql_nulls_not_distinct=True,  # one store-wide row per type/basis
+        ),
         CheckConstraint("amount >= 0", name="ck_cost_nonnegative"),
         {"schema": "shopify"},
     )

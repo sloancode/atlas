@@ -144,6 +144,17 @@ class FakeShopify:
         self.calls.append((query, variables))
         if self.fail_on and self.fail_on in query:
             raise RuntimeError("simulated Shopify outage token=shpat_SHOULDBEREDACTED123")
+        if query == Q.SHOP:
+            return {
+                "shop": {
+                    "name": "Fixture Shop",
+                    "currencyCode": "USD",
+                    "ianaTimezone": "America/Chicago",
+                },
+                "currentAppInstallation": {
+                    "accessScopes": [{"handle": "read_orders"}, {"handle": "read_products"}]
+                },
+            }
         if query in self.data:
             root, items = self.data[query]
             size = self.page_size_override or variables["first"]
