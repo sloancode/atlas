@@ -6,9 +6,10 @@ API responses. Nothing in this module may be hardcoded with a real credential.
 """
 
 from functools import lru_cache
+from typing import Annotated
 
 from pydantic import Field, SecretStr, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Pinned Admin API version. Bump deliberately, never implicitly.
 SHOPIFY_API_VERSION = "2026-10"
@@ -23,7 +24,12 @@ SHOPIFY_OPTIONAL_SCOPES: frozenset[str] = frozenset({"read_reports", "read_all_o
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore", case_sensitive=False
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        case_sensitive=False,
+        # Blank lines in .env (e.g. `FMP_API_KEY=`) mean "not set", not an empty secret.
+        env_ignore_empty=True,
     )
 
     environment: str = Field(default="development")
@@ -32,7 +38,10 @@ class Settings(BaseSettings):
     database_url: SecretStr = Field(
         default=SecretStr("postgresql+psycopg://atlas:atlas_dev_local@localhost:5432/atlas")
     )
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    # Comma-separated in .env (NoDecode: not parsed as JSON).
+    cors_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["http://localhost:3000"]
+    )
 
     # --- Shopify (read-only) -------------------------------------------------
     shopify_store_domain: str | None = None  # e.g. "example.myshopify.com"

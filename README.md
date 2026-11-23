@@ -24,7 +24,33 @@ docs/       integration notes
 PROJECT_STATUS.md   what works, what doesn't, what's needed
 ```
 
-## Run locally
+## Run on a Chromebook (or any Debian/Ubuntu Linux)
+
+1. Turn on Linux: **Settings → About ChromeOS → Developers → Linux development environment → Turn on**
+   (allow at least 10 GB of disk). Then open the **Terminal** app and choose **penguin**.
+2. Install git and download ATLAS:
+   ```bash
+   sudo apt-get update && sudo apt-get install -y git
+   git clone https://github.com/sloancode/atlas && cd atlas
+   ```
+3. Run the one-time setup (installs PostgreSQL, Node, pnpm and uv; takes a few minutes):
+   ```bash
+   ./scripts/setup-linux.sh
+   ```
+4. Add your Shopify app's client ID and secret yourself — never paste them into a chat:
+   ```bash
+   nano backend/.env
+   ```
+   Fill in `SHOPIFY_CLIENT_ID=` and `SHOPIFY_CLIENT_SECRET=`, then **Ctrl+O, Enter, Ctrl+X**.
+5. Start ATLAS (leave the Terminal window open; **Ctrl+C** stops it):
+   ```bash
+   ./scripts/run.sh
+   ```
+6. Open **http://localhost:3000** in Chrome → **Settings** → **Run live connection check** → **Sync now**.
+
+Next time, just open Terminal and run `cd atlas && ./scripts/run.sh`.
+
+## Run locally (macOS / other)
 
 Prerequisites: Python 3.13 + [uv](https://docs.astral.sh/uv/), Node 22 + pnpm, PostgreSQL 16 (or Docker).
 

@@ -58,3 +58,39 @@ def test_period() -> None:
     assert Period(start=date(2026, 1, 1), end=date(2026, 1, 31)).days == 31
     with pytest.raises(ValidationError):
         Period(start=date(2026, 2, 1), end=date(2026, 1, 1))
+
+
+def test_env_example_loads_as_shipped(tmp_path, monkeypatch) -> None:
+    """The template users copy must parse, and its blank keys must count as unset."""
+    from pathlib import Path
+
+    from app.providers.registry import build_providers
+
+    example = Path(__file__).resolve().parents[1] / ".env.example"
+    env = tmp_path / ".env"
+    env.write_text(
+        example.read_text().replace(
+            "SHOPIFY_STORE_DOMAIN=your-store.myshopify.com",
+            "SHOPIFY_STORE_DOMAIN=rcae4k-sp.myshopify.com",
+        )
+    )
+    for var in ("CORS_ORIGINS", "DATABASE_URL", "FMP_API_KEY", "MASSIVE_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+    s = Settings(_env_file=env)
+    assert s.cors_origins == ["http://localhost:3000"]
+    assert s.shopify_store_domain == "rcae4k-sp.myshopify.com"
+    assert s.fmp_api_key is None and s.anthropic_api_key is None
+    states = {p.name: p.config_status().state for p in build_providers(s)}
+    assert states == {
+        "shopify": "not_configured",
+        "claude": "not_configured",
+        "massive": "not_configured",
+        "fmp": "not_configured",
+        "sec_edgar": "not_configured",
+        "ebay": "planned",
+    }
+
+
+def test_cors_origins_comma_separated() -> None:
+    s = Settings(_env_file=None, cors_origins="http://a.test, http://b.test")
+    assert s.cors_origins == ["http://a.test", "http://b.test"]

@@ -38,7 +38,9 @@ _Last updated: 2026-11-23 · Current phase: **2 complete (Shopify sync, live run
 | API: `POST /api/shopify/sync`, `GET /api/shopify/sync/runs`, `GET /api/shopify/data-summary` | tests + live `curl` |
 | Settings → "Shopify data in ATLAS" panel with read-only Sync now | Playwright click-through, 0 console errors |
 
-Totals: **41 backend tests passing**, ruff clean, ESLint clean, production build OK.
+| Chromebook/Linux scripts: `scripts/setup-linux.sh` (idempotent; never handles the secret), `scripts/run.sh` | end-to-end on a fresh Ubuntu 24.04 container: setup ×2, run, API + UI + sync endpoint checked |
+
+Totals: **43 backend tests passing**, ruff clean, ESLint clean, production build OK.
 
 ## Incomplete / not started
 
@@ -52,12 +54,17 @@ Totals: **41 backend tests passing**, ruff clean, ESLint clean, production build
 
 ## Current bugs / limitations
 
-- No known bugs. Fixed during testing: DB health check queried `alembic_version` outside the
+- No known bugs. Fixed during testing: `.env.example`'s `CORS_ORIGINS` crashed config loading,
+  and blank keys (e.g. `FMP_API_KEY=`) counted as configured — now covered by a test that loads
+  the shipped template; DB health check queried `alembic_version` outside the
   `core` schema; Phase 1 migration downgrade left enum types behind (blocked re-apply).
 - Orders older than 60 days are unavailable without the protected `read_all_orders` scope.
 - Order line-item quantities are as placed; refunded quantities live in `refund_lines` and
   are subtracted in Phase 3 analytics (not yet implemented).
 - Live Shopify connectivity through ATLAS is **unverified** until app credentials exist.
+- Setup script tested on Ubuntu 24.04, not Debian 12 (ChromeOS's Linux): Debian mirrors and the
+  NodeSource/uv installer hosts are blocked in the cloud test environment, so those two
+  downloads were pre-provided in the test. Same apt/PostgreSQL code paths otherwise.
 
 ## Required credentials (none are present yet)
 
@@ -75,7 +82,7 @@ Totals: **41 backend tests passing**, ruff clean, ESLint clean, production build
 
 ## Next steps
 
-1. Owner: run ATLAS locally with the app's client ID/secret in `backend/.env`, then Settings →
-   live check → Sync now. Confirms end-to-end access.
+1. Owner (Chromebook): follow README → "Run on a Chromebook", add the client ID/secret to
+   `backend/.env`, then Settings → live check → Sync now. Confirms end-to-end access.
 2. Phase 3: executive dashboard, product analytics, profitability (cost inputs UI), inventory
    coverage, period comparisons — tested on labeled fixtures since the store has no orders.
