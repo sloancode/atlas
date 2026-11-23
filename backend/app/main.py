@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import analytics, shopify, system
+from app.api.routes import analytics, intelligence, shopify, system
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.providers.shopify.provider import ShopifyProvider
@@ -52,6 +52,8 @@ def create_app(*, enable_scheduler: bool = True) -> FastAPI:
     app.include_router(shopify.router)
     app.include_router(analytics.router)
     app.include_router(analytics.costs_router)
+    app.include_router(intelligence.reports_router)
+    app.include_router(intelligence.analyst_router)
     return app
 
 

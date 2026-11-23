@@ -26,6 +26,12 @@ def _report(ok: bool) -> SyncReport:
 def scheduler(monkeypatch: pytest.MonkeyPatch, shopify_settings: Settings) -> SyncScheduler:
     s = SyncScheduler(shopify_settings)
     s.scheduler = _FakeAPS()  # type: ignore[assignment]
+    s.report_calls = 0  # type: ignore[attr-defined]
+
+    async def _no_db_reports() -> None:  # never touch a real database from unit tests
+        s.report_calls += 1  # type: ignore[attr-defined]
+
+    s._reports = _no_db_reports  # type: ignore[method-assign]
     return s
 
 
@@ -61,3 +67,16 @@ async def test_crash_is_retried(monkeypatch, scheduler) -> None:
     monkeypatch.setattr(sched_mod, "run_shopify_sync", crash)
     await scheduler._job()
     assert scheduler._attempt == 1
+
+
+async def test_reports_only_after_fully_successful_sync(monkeypatch, scheduler) -> None:
+    results = iter([_report(False), _report(True)])
+
+    async def seq(*a, **k):
+        return next(results)
+
+    monkeypatch.setattr(sched_mod, "run_shopify_sync", seq)
+    await scheduler._job()
+    assert scheduler.report_calls == 0
+    await scheduler._job()
+    assert scheduler.report_calls == 1

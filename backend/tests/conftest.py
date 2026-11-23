@@ -73,6 +73,7 @@ def factory(engine):
                 "TRUNCATE shopify.products, shopify.variants, shopify.locations, "
                 "shopify.inventory_levels, shopify.orders, shopify.order_lines, shopify.refunds, "
                 "shopify.refund_lines, shopify.cost_inputs, shopify.inventory_alert_rules, "
+                "shopify.reports, "
                 "core.sync_runs, core.app_settings RESTART IDENTITY"
             )
         )

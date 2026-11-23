@@ -34,6 +34,7 @@ from app.services.analytics.context import (
     resolve_periods,
 )
 from app.services.analytics.sales import ORDER_FILTER, RETURN_FILTER
+from app.services.analytics.scoring import Opportunity, ScoreInputs, score_product
 
 MIN_UNITS_FOR_MOMENTUM = 3
 MOMENTUM_THRESHOLD_PCT = 25.0
@@ -175,6 +176,7 @@ class ProductRow(BaseModel):
     momentum_pct: float | None
     flags: list[Flag]
     in_catalog: bool
+    opportunity: Opportunity | None = None
 
 
 class ProductsResponse(BaseModel):
@@ -336,6 +338,8 @@ def products_report(
     a_cur, a_prev = aggregate(s, cur, "product_gid"), aggregate(s, prev, "product_gid")
     r30 = aggregate(s, _trailing(today, 30, 0, ctx), "product_gid")
     p30 = aggregate(s, _trailing(today, 30, 30, ctx), "product_gid")
+    r90 = aggregate(s, _trailing(today, 90, 0, ctx), "product_gid")
+    thresholds_by_product: dict[str, AlertThresholds] = {}
 
     variants_by_product: dict[str, list[ShopifyVariant]] = {}
     for v in c.variants.values():
@@ -363,6 +367,7 @@ def products_report(
                 (per_variant.get(v.gid, default) for v in vs), key=lambda x: x.min_days_of_cover
             )
         )
+        thresholds_by_product[gid] = t
         flags: list[Flag] = []
         if momentum_flag:
             flags.append(momentum_flag)
@@ -438,6 +443,33 @@ def products_report(
                 label="Best seller",
                 reason=f"#{r.rank} by net sales in this period (top 20%).",
             ),
+        )
+    # Opportunity score (catalog products only), relative to this store's leaders.
+    scored = [r for r in rows if r.in_catalog]
+    max_velocity = max(
+        (max(r30.get(r.product_gid, Agg()).net_units, 0) / 30 for r in scored), default=0.0
+    )
+    max_sales_90d = max(
+        (float(r90.get(r.product_gid, Agg()).net_sales) for r in scored), default=0.0
+    )
+    for r in scored:
+        t = thresholds_by_product.get(r.product_gid, default)
+        a90 = r90.get(r.product_gid, Agg())
+        r.opportunity = score_product(
+            ScoreInputs(
+                velocity=max(r30.get(r.product_gid, Agg()).net_units, 0) / 30,
+                recent_units=r30.get(r.product_gid, Agg()).net_units,
+                prior_units=p30.get(r.product_gid, Agg()).net_units,
+                available=r.available,
+                days_of_cover=r.days_of_cover,
+                net_sales_90d=float(a90.net_sales),
+                net_units_90d=a90.net_units,
+                min_units=t.min_units,
+                min_days_of_cover=t.min_days_of_cover,
+                max_days_of_cover=t.max_days_of_cover,
+            ),
+            max_velocity=max_velocity,
+            max_sales_90d=max_sales_90d,
         )
     rows.sort(key=lambda r: (r.rank is None, r.rank or 0, r.title))
 

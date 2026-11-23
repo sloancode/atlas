@@ -12,13 +12,14 @@ Phase 1 creates the foundation tables. Shopify catalog/order tables are added
 in Phase 2 via migrations.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 
 from sqlalchemy import (
     JSON,
     CheckConstraint,
+    Date,
     DateTime,
     Enum,
     Numeric,
@@ -289,3 +290,23 @@ class ShopifyRefundLine(Base):
     line_item_gid: Mapped[str] = mapped_column(String(80), index=True)
     quantity: Mapped[int]
     subtotal: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+
+
+class Report(Base):
+    """Generated business report. `facts` is deterministic; `narrative` is optional AI text."""
+
+    __tablename__ = "reports"
+    __table_args__ = (
+        UniqueConstraint("kind", "period_start", "period_end", name="uq_report_period"),
+        {"schema": "shopify"},
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(10))  # daily | weekly
+    period_start: Mapped[date] = mapped_column(Date)
+    period_end: Mapped[date] = mapped_column(Date, index=True)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    facts: Mapped[dict] = mapped_column(JSON)
+    narrative: Mapped[dict | None] = mapped_column(JSON)
+    # not_requested | generated | failed | not_configured
+    narrative_status: Mapped[str] = mapped_column(String(20), default="not_requested")

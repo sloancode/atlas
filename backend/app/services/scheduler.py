@@ -55,6 +55,31 @@ class SyncScheduler:
         if self.scheduler.running:
             self.scheduler.shutdown(wait=False)
 
+    async def _reports(self) -> None:
+        """After a successful sync, generate any missing daily/weekly reports (catch-up)."""
+        import asyncio
+
+        from app.services.ai import AIError, report_narrative
+        from app.services.reports import ensure_reports
+
+        try:
+            with sessionmaker(bind=get_engine(), expire_on_commit=False)() as s:
+                made = await asyncio.to_thread(ensure_reports, s)
+                for r in made:
+                    if self.settings.anthropic_api_key and self.settings.ai_report_narratives:
+                        try:
+                            r.narrative = await report_narrative(self.settings, r.facts)
+                            r.narrative_status = "generated"
+                        except AIError as exc:
+                            r.narrative, r.narrative_status = {"error": str(exc)}, "failed"
+                    elif not self.settings.anthropic_api_key:
+                        r.narrative_status = "not_configured"
+                s.commit()
+                if made:
+                    log.info("Generated %s report(s)", len(made))
+        except Exception as exc:  # reports must never break syncing
+            log.warning("Report generation failed: %s", type(exc).__name__)
+
     async def _job(self) -> None:
         try:
             report = await run_shopify_sync(self.settings)
@@ -64,6 +89,8 @@ class SyncScheduler:
             ok = False
         if ok:
             self._attempt = 0
+            if report.ok:
+                await self._reports()
             return
         if self._attempt < len(RETRY_DELAYS):
             delay = RETRY_DELAYS[self._attempt]

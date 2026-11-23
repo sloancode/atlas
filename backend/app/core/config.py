@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     # --- AI analysis (Claude API, separate from Claude Code) -----------------
     anthropic_api_key: SecretStr | None = None
     anthropic_model: str = "claude-opus-5-5"
+    # Add an AI interpretation to scheduled reports (a few cents per report) when a key is set.
+    ai_report_narratives: bool = True
 
     # --- Market data providers ----------------------------------------------
     massive_api_key: SecretStr | None = None
