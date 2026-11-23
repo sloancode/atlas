@@ -1,11 +1,15 @@
 import Link from "next/link";
-import { getSystemStatus } from "@/lib/api";
+import { getOverview, getSystemStatus } from "@/lib/api";
+import { KpiTile } from "@/components/analytics";
 import { EmptyState, MetricTile, PageHeader, Panel, StateBadge } from "@/components/ui";
+import { fmtDateTime } from "@/lib/format";
 
-const KPIS = ["Gross sales", "Net sales", "Orders", "Avg order value", "Units sold", "Refunds"];
+const KPIS = ["gross_sales", "net_sales", "orders", "aov", "units_sold", "refunds_total"];
 
 export default async function OverviewPage() {
-  const res = await getSystemStatus();
+  const [res, ov] = await Promise.all([getSystemStatus(), getOverview({ period: "30d" })]);
+  const kpiMap = ov.ok ? Object.fromEntries(ov.data.kpis.map((k) => [k.key, k])) : {};
+  const synced = ov.ok && ov.data.meta.status !== "missing";
   const providers = res.ok ? res.data.providers : [];
   const shopify = providers.find((p) => p.name === "shopify");
   const shopifyReady = shopify?.state === "connected";
@@ -22,18 +26,25 @@ export default async function OverviewPage() {
         <h2 className="text-[11px] font-medium uppercase tracking-[0.12em] text-dim">
           Shopify · last 30 days
         </h2>
-        <span className="text-[11px] text-faint">Source: Shopify Admin API</span>
+        <span className="text-[11px] text-faint">
+          Source: Shopify Admin API · as of {synced && ov.ok ? fmtDateTime(ov.data.meta.as_of) : "—"} ·{" "}
+          <Link href="/shopify" className="text-accent hover:underline">Dashboard →</Link>
+        </span>
       </div>
       <div className="mb-5 grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
-        {KPIS.map((k) => (
-          <MetricTile
-            key={k}
-            label={k}
-            value={null}
-            status="missing"
-            note={shopifyReady ? "Sync not yet run" : "Shopify not connected"}
-          />
-        ))}
+        {KPIS.map((k) =>
+          synced && kpiMap[k] ? (
+            <KpiTile key={k} kpi={kpiMap[k]} currency={ov.ok ? ov.data.meta.currency : null} />
+          ) : (
+            <MetricTile
+              key={k}
+              label={k.replace("_", " ")}
+              value={null}
+              status="missing"
+              note={shopifyReady ? "Sync not yet run" : "Shopify not connected"}
+            />
+          ),
+        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -51,7 +62,7 @@ export default async function OverviewPage() {
                 <td>Shopify business intelligence</td>
                 <td>{shopify && <StateBadge state={shopify.state} />}</td>
                 <td className="text-dim">
-                  {shopifyReady ? "Phase 2: data sync" : "Add Shopify app credentials"}
+                  {shopifyReady ? "Live: dashboards, products, profitability, inventory" : "Add Shopify app credentials"}
                 </td>
               </tr>
               <tr className="border-b border-border">

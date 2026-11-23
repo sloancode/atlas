@@ -1,6 +1,6 @@
 # ATLAS — Project Status
 
-_Last updated: 2026-11-23 · Current phase: **2 complete — live Shopify sync verified on owner's Chromebook** → next: Phase 3 (Shopify analytics)_
+_Last updated: 2026-11-23 · Current phase: **3 complete — Shopify analytics** → next: Phase 4 (AI analyst, opportunity scores, reports)_
 
 ## Environment findings (inspection)
 
@@ -42,11 +42,17 @@ _Last updated: 2026-11-23 · Current phase: **2 complete — live Shopify sync v
 
 | `scripts/check-shopify.sh`: validates saved credentials and token exchange without revealing secrets | mock endpoint tests; used successfully by owner |
 
-Totals: **43 backend tests passing**, ruff clean, ESLint clean, production build OK.
+| **Phase 3** — Sales KPIs with fixed definitions (docs/METRICS.md); today/7D/30D/90D/YTD/custom in shop timezone; previous-period comparison | 12 tests on hand-computed dataset (incl. timezone boundary, refunds by refund date, test/cancelled exclusion) |
+| Executive dashboard: 12 KPI tiles, net-sales-by-day chart (hover tooltip, table view, validated palette), best/weakest products, low inventory | Playwright screenshots + hover check |
+| Products: per-product metrics, ranking, growth, order frequency, inventory, cover, flags with reasons, search/sort/filter; product detail page | 11 tests + screenshots |
+| Inventory: days of cover, statuses, configurable thresholds (store default + per-variant) | tests + browser form submit |
+| Profitability: COGS/gross profit/contribution/net operating profit/break-even/per-order; cost input forms; missing inputs named; figures built on unknown costs withheld | 4 tests incl. full hand-computed chain; browser form submit |
+| Settings shows Connected + last full sync time after a successful sync | API |
+
+Totals: **70 backend tests passing**, ruff clean, ESLint clean, production build OK.
 
 ## Incomplete / not started
 
-- Phase 3: executive dashboard, product analytics, profitability, inventory monitoring, date comparisons.
 - Phase 4: AI analyst, opportunity score, daily/weekly reports, export.
 - Phase 5: market data fetching, indicators, research reports, scanner, watchlists, paper portfolio.
 - Phase 6: unified dashboard, eBay module build-out, cross-platform identity.
@@ -60,13 +66,15 @@ Totals: **43 backend tests passing**, ruff clean, ESLint clean, production build
   the shipped template; DB health check queried `alembic_version` outside the
   `core` schema; Phase 1 migration downgrade left enum types behind (blocked re-apply).
 - Orders older than 60 days are unavailable without the protected `read_all_orders` scope.
-- Order line-item quantities are as placed; refunded quantities live in `refund_lines` and
-  are subtracted in Phase 3 analytics (not yet implemented).
+- Seasonality and opportunity scores not yet implemented (Phase 4); seasonality also needs 12 months
+  of history, which requires `read_all_orders`.
+- Returns are net of discounts, so "Returns" can differ slightly from Shopify's report, which adds
+  discounts back; net sales is unaffected. See docs/METRICS.md.
+- Store has no products/orders yet, so live pages show honest empty states; populated views were
+  verified with a labeled test dataset in a separate demo database.
 - **Live Shopify verified (2026-11-22, owner's Chromebook):** token exchange succeeded
   (`scripts/check-shopify.sh`), two full syncs succeeded (1 location, 0 products/orders —
   matches the store).
-- UX gap: Settings shows "Configured; not yet verified" after a successful sync unless the
-  live check is run; should reflect the last successful sync.
 - Setup script tested on Ubuntu 24.04, not Debian 12 (ChromeOS's Linux): Debian mirrors and the
   NodeSource/uv installer hosts are blocked in the cloud test environment, so those two
   downloads were pre-provided in the test. Same apt/PostgreSQL code paths otherwise.
@@ -87,5 +95,6 @@ Totals: **43 backend tests passing**, ruff clean, ESLint clean, production build
 
 ## Next steps
 
-1. Phase 3: executive dashboard, product analytics, profitability (cost inputs UI), inventory
-   coverage, period comparisons — tested on labeled fixtures since the store has no orders.
+1. Owner: `git pull` on the Chromebook and restart (`./scripts/run.sh`) to get Phase 3.
+2. Phase 4: AI business analyst (needs `ANTHROPIC_API_KEY`), explained opportunity scores,
+   daily/weekly reports with export.

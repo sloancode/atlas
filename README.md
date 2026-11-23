@@ -20,7 +20,7 @@ backend/    FastAPI + SQLAlchemy + Alembic + pandas (Python 3.13, uv)
   migrations/      Alembic
   tests/
 frontend/   Next.js 15 + TypeScript + Tailwind (dark terminal UI)
-docs/       integration notes
+docs/       integration notes, metric definitions (METRICS.md)
 PROJECT_STATUS.md   what works, what doesn't, what's needed
 ```
 

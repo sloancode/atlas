@@ -49,6 +49,18 @@ def test_missing_costs_are_flagged_not_invented(factory) -> None:
     assert any("Poster" in n for n in m["gross_profit"].notes)
     assert r.cogs_coverage_pct == 41.9  # 36 / 86
     assert m["net_operating_profit"].status == DataStatus.INCOMPLETE
+    # Profit figures that depend on unknown costs are withheld, not shown as partial sums.
+    for key in (
+        "contribution",
+        "contribution_pct",
+        "net_operating_profit",
+        "break_even_sales",
+        "contribution_per_order",
+        "profit_per_order",
+    ):
+        assert m[key].value is None, key
+    # Sums whose every component is unknown are unknown, not zero.
+    assert m["variable_costs"].value is None and m["fixed_costs"].value is None
     assert "advertising per month" in r.missing_inputs
     by = {p.title: p for p in r.products}
     assert by["Poster"].cogs is None and by["Poster"].status == DataStatus.INCOMPLETE

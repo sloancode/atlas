@@ -189,7 +189,12 @@ def profitability(s: Session, ctx: ShopContext, cur: Window) -> ProfitabilityRes
 
     metrics: list[Metric] = []
 
-    def add(key, label, kind, value, missing: list[str], formula, notes=None):
+    def add(
+        key, label, kind, value, missing: list[str], formula, notes=None, *, complete_only=False
+    ):
+        if complete_only and missing:
+            value = None  # never show a profit figure built on unknown costs
+            notes = ["Shown once every input above is entered."] + (notes or [])
         metrics.append(
             Metric(
                 key=key,
@@ -265,11 +270,14 @@ def profitability(s: Session, ctx: ShopContext, cur: Window) -> ProfitabilityRes
         + (fee_fixed or zero) * orders
     )
     contribution = gross_profit + totals.shipping - variable
+    all_order_costs_unknown = (
+        ship is None and pack is None and fee_pct is None and fee_fixed is None
+    )
     add(
         "variable_costs",
         "Order costs (shipping, packaging, fees)",
         "money",
-        variable,
+        None if all_order_costs_unknown else variable,
         [m for m in var_missing if m not in cogs_missing],
         "Orders x (shipping + packaging + fixed fee) + fee % x amount collected",
     )
@@ -280,6 +288,7 @@ def profitability(s: Session, ctx: ShopContext, cur: Window) -> ProfitabilityRes
         contribution,
         var_missing,
         "Gross profit + shipping charged - order costs",
+        complete_only=True,
     )
     add(
         "contribution_pct",
@@ -288,6 +297,7 @@ def profitability(s: Session, ctx: ShopContext, cur: Window) -> ProfitabilityRes
         None if net_sales == 0 else contribution / net_sales * 100,
         var_missing,
         "Contribution / net sales",
+        complete_only=True,
     )
 
     # ---- fixed costs, operating profit, break-even
@@ -300,11 +310,14 @@ def profitability(s: Session, ctx: ShopContext, cur: Window) -> ProfitabilityRes
         (store["advertising_per_month"] or zero) + (store["other_opex_per_month"] or zero)
     ) * factor
     nop = contribution - fixed
+    all_fixed_unknown = (
+        store["advertising_per_month"] is None and store["other_opex_per_month"] is None
+    )
     add(
         "fixed_costs",
         "Advertising + other opex (prorated)",
         "money",
-        fixed,
+        None if all_fixed_unknown else fixed,
         [m for m in fixed_missing if m not in var_missing],
         f"Monthly amounts x {cur.period.days}/30.44 days",
     )
@@ -315,6 +328,7 @@ def profitability(s: Session, ctx: ShopContext, cur: Window) -> ProfitabilityRes
         nop,
         fixed_missing,
         "Contribution - advertising - other opex",
+        complete_only=True,
     )
     if net_sales > 0 and contribution > 0:
         be = fixed / (contribution / net_sales)
@@ -334,6 +348,7 @@ def profitability(s: Session, ctx: ShopContext, cur: Window) -> ProfitabilityRes
         fixed_missing,
         "Fixed costs / contribution margin %",
         be_note,
+        complete_only=True,
     )
     per_order_note = ["Undefined with no orders."] if totals.orders == 0 else []
     add(
@@ -344,6 +359,7 @@ def profitability(s: Session, ctx: ShopContext, cur: Window) -> ProfitabilityRes
         var_missing,
         "Contribution / orders",
         per_order_note,
+        complete_only=True,
     )
     add(
         "profit_per_order",
@@ -353,6 +369,7 @@ def profitability(s: Session, ctx: ShopContext, cur: Window) -> ProfitabilityRes
         fixed_missing,
         "Net operating profit / orders",
         per_order_note,
+        complete_only=True,
     )
 
     product_rows = []

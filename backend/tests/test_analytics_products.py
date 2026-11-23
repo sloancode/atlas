@@ -71,6 +71,7 @@ def test_products_report(factory) -> None:
     assert lamp.rank is None and lamp.net_sales == 0
     assert [p.title for p in rep.products][:2] == ["Poster", "Mug"]
     assert mug.velocity_per_day == 0.1 and mug.days_of_cover == 30.0 and mug.available == 3
+    assert poster.days_of_cover == 600.0  # 40 / (2/30), from the unrounded rate
     flags = {t: {f.key for f in by[t].flags} for t in by}
     assert flags["Poster"] == {"best_seller", "high_inventory_weak_demand"}
     assert flags["Mug"] == {"low_inventory_strong_demand"}

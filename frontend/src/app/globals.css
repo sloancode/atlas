@@ -60,3 +60,11 @@ body {
   background: var(--accent-dim);
   color: var(--accent);
 }
+
+/* Chart series colors -- validated for the dark panel surface (#0d1117) with the
+   dataviz palette validator: lightness band, chroma, CVD and contrast all PASS. */
+:root {
+  --viz-pos: #3987e5;
+  --viz-neg: #e66767;
+  --viz-grid: #1e2632;
+}

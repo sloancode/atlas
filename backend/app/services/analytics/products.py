@@ -288,8 +288,9 @@ def inventory_report(s: Session, ctx: ShopContext, today: date | None = None) ->
         t = per_variant.get(v.gid, default)
         avail = _variant_available(c, v)
         net30 = v30.get(v.gid, Agg()).net_units
-        velocity = round(max(net30, 0) / 30, 3)
-        status, reasons = classify_variant(avail, velocity, v90.get(v.gid, Agg()).net_units, t)
+        velocity_raw = max(net30, 0) / 30
+        velocity = round(velocity_raw, 3)
+        status, reasons = classify_variant(avail, velocity_raw, v90.get(v.gid, Agg()).net_units, t)
         product = c.products.get(v.product_gid)
         rows.append(
             VariantInventory(
@@ -303,7 +304,7 @@ def inventory_report(s: Session, ctx: ShopContext, today: date | None = None) ->
                 available=avail,
                 net_units_30d=net30,
                 velocity_per_day=velocity,
-                days_of_cover=_cover(avail, velocity),
+                days_of_cover=_cover(avail, velocity_raw),
                 status=status,
                 reasons=reasons,
                 thresholds=t.__dict__,
@@ -351,8 +352,9 @@ def products_report(
         available = sum(tracked) if tracked else None
         recent = r30.get(gid, Agg()).net_units
         prior = p30.get(gid, Agg()).net_units
-        velocity = round(max(recent, 0) / 30, 3)
-        cover = _cover(available, velocity)
+        velocity_raw = max(recent, 0) / 30
+        velocity = round(velocity_raw, 3)
+        cover = _cover(available, velocity_raw)
         momentum_pct, momentum_flag = _momentum(recent, prior)
         t = (
             default

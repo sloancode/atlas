@@ -83,3 +83,198 @@ export async function apiPost<T>(path: string): Promise<ApiResult<T>> {
     return { ok: false, error: "ATLAS backend is unreachable", fetchedAt };
   }
 }
+
+// ---------------------------------------------------------------- analytics
+export type DataStatusValue =
+  | "live" | "delayed" | "historical" | "estimated" | "incomplete" | "missing" | "simulated";
+
+export type Period = { start: string; end: string };
+
+export type Meta = {
+  source: string;
+  status: DataStatusValue;
+  as_of: string | null;
+  period: Period | null;
+  previous_period: Period | null;
+  currency: string | null;
+  timezone: string;
+  notes: string[];
+};
+
+export type Kpi = {
+  key: string;
+  label: string;
+  definition: string;
+  kind: "money" | "count" | "percent";
+  current: number | null;
+  previous: number | null;
+  change_pct: number | null;
+};
+
+export type DailyPoint = { date: string; gross_sales: number; net_sales: number; orders: number };
+export type Overview = { meta: Meta; kpis: Kpi[]; daily: DailyPoint[]; has_sales: boolean };
+
+export type Flag = { key: string; label: string; reason: string };
+
+export type ProductRow = {
+  product_gid: string;
+  title: string;
+  status: string | null;
+  image_url: string | null;
+  skus: string[];
+  price_min: number | null;
+  price_max: number | null;
+  units_sold: number;
+  units_returned: number;
+  gross_sales: number;
+  net_sales: number;
+  orders: number;
+  order_frequency_per_week: number;
+  prev_net_sales: number;
+  growth_pct: number | null;
+  rank: number | null;
+  available: number | null;
+  velocity_per_day: number;
+  days_of_cover: number | null;
+  momentum_pct: number | null;
+  flags: Flag[];
+  in_catalog: boolean;
+};
+
+export type ProductsResponse = { meta: Meta; products: ProductRow[]; seasonality: string };
+
+export type VariantInventory = {
+  variant_gid: string;
+  product_gid: string;
+  product_title: string;
+  variant_title: string;
+  sku: string | null;
+  price: number;
+  tracked: boolean;
+  available: number | null;
+  net_units_30d: number;
+  velocity_per_day: number;
+  days_of_cover: number | null;
+  status: string;
+  reasons: string[];
+  thresholds: Record<string, number>;
+};
+
+export type InventoryResponse = {
+  meta: Meta;
+  thresholds: Record<string, number>;
+  variants: VariantInventory[];
+  summary: Record<string, number>;
+};
+
+export type ProductDetail = {
+  meta: Meta;
+  product: ProductRow;
+  variants: VariantInventory[];
+  daily: { date: string; units: number; sales_after_discounts: number }[];
+};
+
+export type Metric = {
+  key: string;
+  label: string;
+  kind: "money" | "percent";
+  value: number | null;
+  status: DataStatusValue;
+  formula: string;
+  notes: string[];
+};
+
+export type ProductProfit = {
+  product_gid: string;
+  title: string;
+  net_units: number;
+  net_sales: number;
+  cogs: number | null;
+  gross_profit: number | null;
+  gross_margin_pct: number | null;
+  status: DataStatusValue;
+  cost_source: string;
+};
+
+export type ProfitabilityResponse = {
+  meta: Meta;
+  metrics: Metric[];
+  products: ProductProfit[];
+  missing_inputs: string[];
+  cogs_coverage_pct: number | null;
+};
+
+export type StoreCosts = Record<
+  | "shipping_cost_per_order" | "packaging_cost_per_order" | "transaction_fee_percent"
+  | "transaction_fee_per_order" | "advertising_per_month" | "other_opex_per_month",
+  string | null
+>;
+
+export type VariantCost = {
+  variant_gid: string;
+  product_title: string;
+  variant_title: string;
+  sku: string | null;
+  price: number;
+  user_cogs: number | null;
+  shopify_unit_cost: number | null;
+  effective_cost: number | null;
+  source: string;
+};
+
+export type CostsResponse = { currency: string | null; store: StoreCosts; variants: VariantCost[] };
+export type AlertRule = {
+  min_units: number | null;
+  min_days_of_cover: number | null;
+  max_days_of_cover: number | null;
+};
+
+export type PeriodParams = { period?: string; start?: string; end?: string };
+
+export function periodQuery(p: PeriodParams): string {
+  const q = new URLSearchParams();
+  q.set("period", p.period ?? "30d");
+  if (p.period === "custom") {
+    if (p.start) q.set("start", p.start);
+    if (p.end) q.set("end", p.end);
+  }
+  return q.toString();
+}
+
+export const getOverview = (p: PeriodParams) => apiGet<Overview>(`/api/analytics/overview?${periodQuery(p)}`);
+export const getProducts = (p: PeriodParams) =>
+  apiGet<ProductsResponse>(`/api/analytics/products?${periodQuery(p)}`);
+export const getProductDetail = (id: string, p: PeriodParams) =>
+  apiGet<ProductDetail>(`/api/analytics/products/${encodeURIComponent(id)}?${periodQuery(p)}`);
+export const getInventory = () => apiGet<InventoryResponse>("/api/analytics/inventory");
+export const getAlertRule = () => apiGet<AlertRule>("/api/analytics/inventory/rule");
+export const getProfitability = (p: PeriodParams) =>
+  apiGet<ProfitabilityResponse>(`/api/analytics/profitability?${periodQuery(p)}`);
+export const getCosts = () => apiGet<CostsResponse>("/api/costs");
+
+export async function apiPut<T>(path: string, body: unknown): Promise<ApiResult<T>> {
+  const fetchedAt = new Date().toISOString();
+  try {
+    const res = await fetch(`${BACKEND}${path}`, {
+      method: "PUT",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      const d = data?.detail;
+      const msg = typeof d === "string" ? d : Array.isArray(d) ? d.map((x) => x.msg).join("; ") : `HTTP ${res.status}`;
+      return { ok: false, error: msg, fetchedAt };
+    }
+    return { ok: true, data: data as T, fetchedAt };
+  } catch {
+    return { ok: false, error: "ATLAS backend is unreachable", fetchedAt };
+  }
+}
+
+/** Numeric Shopify id from a gid, for URLs. Returns null for non-catalog keys. */
+export function productIdFromGid(gid: string): string | null {
+  const m = gid.match(/^gid:\/\/shopify\/Product\/(\d+)$/);
+  return m ? m[1] : null;
+}

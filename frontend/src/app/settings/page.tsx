@@ -77,6 +77,11 @@ export default async function SettingsPage({
                     </td>
                     <td className="max-w-md py-2.5 pr-3 text-dim">
                       {p.message}
+                      {typeof p.details.last_successful_sync === "string" && (
+                        <div className="mt-1 text-[11px] text-faint">
+                          Last full sync: {new Date(p.details.last_successful_sync).toLocaleString()}
+                        </div>
+                      )}
                       {typeof p.details.shop_name === "string" && (
                         <div className="mt-1 text-[11px] text-text">
                           {p.details.shop_name} · {String(p.details.currency)} ·{" "}
