@@ -19,6 +19,7 @@ from typing import Any
 import httpx
 
 from app.core.config import SHOPIFY_API_VERSION, Settings
+from app.core.logging import redact
 from app.providers.base import ProviderError
 
 log = logging.getLogger(__name__)
@@ -30,6 +31,20 @@ _MAX_ATTEMPTS = 5
 
 class ReadOnlyViolation(ProviderError):
     pass
+
+
+def _oauth_reason(resp: httpx.Response) -> str:
+    """Shopify's OAuth error code/description (never contains our secret), redacted anyway."""
+    try:
+        body = resp.json()
+    except ValueError:
+        return ""
+    if not isinstance(body, dict):
+        return ""
+    parts = [str(body.get(k))[:200] for k in ("error", "error_description") if body.get(k)]
+    if not parts and isinstance(body.get("errors"), str):
+        parts = [body["errors"][:200]]
+    return f": {redact(' - '.join(parts))}" if parts else ""
 
 
 class ShopifyClient:
@@ -69,8 +84,9 @@ class ShopifyClient:
                 )
                 if resp.status_code != 200:
                     raise ProviderError(
-                        f"Shopify token request failed (HTTP {resp.status_code}). Check the app "
-                        "is installed on the store and the client ID/secret are correct.",
+                        f"Shopify token request failed (HTTP {resp.status_code})"
+                        f"{_oauth_reason(resp)}. Check the app is installed on the store and "
+                        "the client ID/secret are correct.",
                         status_code=resp.status_code,
                     )
                 body = resp.json()

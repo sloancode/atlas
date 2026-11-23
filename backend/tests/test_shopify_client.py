@@ -91,6 +91,7 @@ async def test_token_failure_message_has_no_secret(shopify_settings: Settings) -
     with pytest.raises(ProviderError) as e:
         await ShopifyClient(shopify_settings).query("{ shop { name } }")
     assert FAKE_SECRET not in str(e.value) and "HTTP 400" in str(e.value)
+    assert "invalid_client" in str(e.value)  # Shopify's reason is surfaced
 
 
 @respx.mock
