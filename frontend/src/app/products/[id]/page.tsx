@@ -91,6 +91,33 @@ export default async function ProductPage({
         </Panel>
       </div>
 
+      {p.opportunity && (
+        <Panel title="Opportunity score" className="mt-4"
+          right={<span className="text-[11px] text-faint">{p.opportunity.disclaimer}</span>}>
+          <div className="grid gap-4 md:grid-cols-[160px_1fr]">
+            <div>
+              <div className="num text-[40px] leading-none">{p.opportunity.score}<span className="text-[14px] text-faint">/100</span></div>
+              <div className="mt-1 text-[11px] text-dim">Confidence: {p.opportunity.confidence}</div>
+            </div>
+            <div className="space-y-2">
+              {p.opportunity.components.map((comp) => (
+                <div key={comp.name}>
+                  <div className="flex justify-between text-[12px]">
+                    <span>{comp.name}</span>
+                    <span className="num text-dim">{comp.points} / {comp.max_points}</span>
+                  </div>
+                  <div className="mt-0.5 h-1.5 overflow-hidden rounded-full bg-panel-2" aria-hidden>
+                    <div className="h-full bg-[var(--viz-pos)]" style={{ width: `${(comp.points / comp.max_points) * 100}%` }} />
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-faint">{comp.reason}</div>
+                </div>
+              ))}
+              <div className="text-[11px] text-dim">{p.opportunity.summary}</div>
+            </div>
+          </div>
+        </Panel>
+      )}
+
       <Panel title="Variants & inventory" className="mt-4">
         <table className="w-full text-left text-[12px]">
           <thead className="text-[10px] uppercase tracking-wider text-faint">

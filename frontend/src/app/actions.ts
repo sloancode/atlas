@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { apiPut } from "@/lib/api";
+import { apiPostJson, apiPut, type AnalystAnswer, type ReportFull } from "@/lib/api";
 
 /*
  * Server actions for user inputs stored in ATLAS's own database.
@@ -53,4 +53,29 @@ export async function saveAlertRule(form: FormData) {
     max_days_of_cover: int("max_days_of_cover"),
   });
   back("/inventory", res.ok ? "Alert thresholds saved." : `Not saved: ${res.error}`);
+}
+
+
+export async function generateReport(form: FormData) {
+  const kind = form.get("kind") === "weekly" ? "weekly" : "daily";
+  const res = await apiPostJson<ReportFull>("/api/reports/generate", { kind, with_ai: true });
+  revalidatePath("/reports");
+  if (!res.ok) redirect(`/reports?msg=${encodeURIComponent(`Report not generated: ${res.error}`)}`);
+  redirect(`/reports?id=${res.data.id}`);
+}
+
+export async function regenerateNarrative(form: FormData) {
+  const id = String(form.get("id") ?? "");
+  const res = await apiPostJson<ReportFull>(`/api/reports/${encodeURIComponent(id)}/narrative`, {});
+  revalidatePath("/reports");
+  redirect(`/reports?id=${id}${res.ok ? "" : `&msg=${encodeURIComponent(res.error)}`}`);
+}
+
+export type AskState = { question: string; answer: AnalystAnswer | null; error: string | null };
+
+export async function askAnalyst(_prev: AskState, form: FormData): Promise<AskState> {
+  const question = String(form.get("question") ?? "").trim();
+  if (!question) return { question, answer: null, error: "Type a question first." };
+  const res = await apiPostJson<AnalystAnswer>("/api/analyst/ask", { question });
+  return res.ok ? { question, answer: res.data, error: null } : { question, answer: null, error: res.error };
 }

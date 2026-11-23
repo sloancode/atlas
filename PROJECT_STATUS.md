@@ -1,6 +1,6 @@
 # ATLAS — Project Status
 
-_Last updated: 2026-11-23 · Current phase: **3 complete — Shopify analytics** → next: Phase 4 (AI analyst, opportunity scores, reports)_
+_Last updated: 2026-11-23 · Current phase: **4 complete — AI business intelligence** → next: Phase 5 (market research engine)_
 
 ## Environment findings (inspection)
 
@@ -49,7 +49,12 @@ _Last updated: 2026-11-23 · Current phase: **3 complete — Shopify analytics**
 | Profitability: COGS/gross profit/contribution/net operating profit/break-even/per-order; cost input forms; missing inputs named; figures built on unknown costs withheld | 4 tests incl. full hand-computed chain; browser form submit |
 | Settings shows Connected + last full sync time after a successful sync | API |
 
-Totals: **70 backend tests passing**, ruff clean, ESLint clean, production build OK.
+| **Phase 4** — Opportunity score 0–100 with per-part reasons and confidence (docs/METRICS.md) | 17 tests incl. hand-computed dataset scores |
+| Daily/weekly reports (7 sections; weekly adds trend + momentum), stored, catch-up after each successful sync, Markdown/CSV export | 5 report tests + 3 API tests + browser download |
+| AI analyst (Claude API, `claude-opus-5-5`): data pack with fact IDs, structured typed answers with citations, verification in code, refusal fallback, clear errors, graceful no-key state | 16 tests (fake client) + end-to-end through the real SDK against a local mock API + browser |
+| Optional AI interpretation on reports (labeled, verified; failure leaves the report intact) | tests + browser |
+
+Totals: **112 backend tests passing**, ruff clean, ESLint clean, production build OK.
 
 ## Incomplete / not started
 
@@ -66,8 +71,10 @@ Totals: **70 backend tests passing**, ruff clean, ESLint clean, production build
   the shipped template; DB health check queried `alembic_version` outside the
   `core` schema; Phase 1 migration downgrade left enum types behind (blocked re-apply).
 - Orders older than 60 days are unavailable without the protected `read_all_orders` scope.
-- Seasonality and opportunity scores not yet implemented (Phase 4); seasonality also needs 12 months
-  of history, which requires `read_all_orders`.
+- Seasonality not implemented: needs 12 months of history, which requires `read_all_orders`.
+- The AI analyst has **not been run against the real Claude API** yet (no key); it was verified with
+  a fake client and a local mock of the Messages API through the real SDK.
+- Estimates and interpretations from the AI are labeled but not number-checked (only facts are).
 - Returns are net of discounts, so "Returns" can differ slightly from Shopify's report, which adds
   discounts back; net sales is unaffected. See docs/METRICS.md.
 - Store has no products/orders yet, so live pages show honest empty states; populated views were
@@ -84,7 +91,7 @@ Totals: **70 backend tests passing**, ruff clean, ESLint clean, production build
 | Variable | For | Needed by |
 |---|---|---|
 | `SHOPIFY_STORE_DOMAIN`, `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET` | Shopify engine | ✅ set on owner's machine |
-| `ANTHROPIC_API_KEY` | AI analyst & reports | Phase 4 |
+| `ANTHROPIC_API_KEY` | AI analyst & report narratives | Phase 4 (optional; not set) |
 | `MASSIVE_API_KEY` and/or `FMP_API_KEY` | Market data | Phase 5 |
 | `SEC_USER_AGENT` | SEC EDGAR | Phase 5 |
 
@@ -95,6 +102,7 @@ Totals: **70 backend tests passing**, ruff clean, ESLint clean, production build
 
 ## Next steps
 
-1. Owner: `git pull` on the Chromebook and restart (`./scripts/run.sh`) to get Phase 3.
-2. Phase 4: AI business analyst (needs `ANTHROPIC_API_KEY`), explained opportunity scores,
-   daily/weekly reports with export.
+1. Owner: `git pull` and restart (`./scripts/run.sh`). Optionally add `ANTHROPIC_API_KEY` to
+   `backend/.env` to enable the analyst; then ask a question to confirm the live API works.
+2. Phase 5: market data adapters (Massive, FMP, SEC EDGAR), indicators, research reports,
+   scanner, watchlists, paper portfolio.

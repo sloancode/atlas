@@ -83,3 +83,38 @@ Status rules:
 - Contribution, net operating profit, break-even and per-order figures show
   **"—" until all of their inputs are entered**. A blank input means unknown;
   enter 0 only when a cost really is zero.
+
+## Opportunity score (0–100)
+
+A relative ranking within your store to prioritise investigation. **Not a
+probability of success or a forecast.** Each part is shown with its reason.
+
+| Part | Points | Rule |
+|---|---|---|
+| Sales velocity | 0–30 | 30 × velocity ÷ fastest product's velocity (30-day net units) |
+| Revenue trend | 0–25 | Last 30 days vs the 30 before: −50% → 0, flat → 12.5, +50% or more → 25. Fewer than 3 units before → neutral 12.5. None before and ≥ 5 now → 18.75 ("new demand") |
+| Inventory health | 0–20 | Healthy cover → 20 · low stock or under the stockout threshold while selling → 12 · overstock → 8 · out of stock while selling → 6 · not tracked → 10 · stock without sales → 4 · out of stock without sales → 2 |
+| Historical performance | 0–25 | 25 × 90-day net sales ÷ the top product's |
+
+Confidence: high (≥ 10 net units in 90 days), medium (≥ 3), low.
+
+## Reports
+
+- **Daily:** yesterday (shop time) vs the day before. **Weekly:** the last complete
+  Monday–Sunday week vs the week before.
+- **Important changes:** a watched metric (net sales, orders, AOV, units, refunds)
+  moved ≥ 20% with a meaningful base (e.g. ≥ 3 orders or ≥ $50 net sales); refunds
+  appearing; products selling after none.
+- **Areas to investigate:** ranked candidates — out of stock while selling, stockout
+  risk, big drops, losing momentum, refunds, low stock, gaining momentum, missing
+  costs, slow stock. At most three; fewer if fewer meet the bar.
+- Generated automatically after each successful sync if missing (catch-up), or on
+  demand. Exports: Markdown and CSV.
+
+## AI analyst verification
+
+Claude receives only a *data pack* of ATLAS facts (`id = value`). Every statement
+it returns is typed fact / estimate / interpretation and cites fact IDs. ATLAS then
+checks, in code: cited IDs must exist; facts and estimates must cite something; every
+number in a **fact** must match a cited value (rounding allowed; dates and window
+lengths like "30 days" ignored). Failures are shown as **⚠ unverified** with the reason.

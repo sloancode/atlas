@@ -14,6 +14,7 @@ const SORTS: Record<string, { label: string; fn: (a: ProductRow, b: ProductRow) 
   growth: { label: "Growth", fn: (a, b) => (b.growth_pct ?? -1e9) - (a.growth_pct ?? -1e9) },
   cover: { label: "Days of cover", fn: (a, b) => (a.days_of_cover ?? 1e9) - (b.days_of_cover ?? 1e9) },
   stock: { label: "Inventory", fn: (a, b) => (b.available ?? -1) - (a.available ?? -1) },
+  score: { label: "Opportunity", fn: (a, b) => (b.opportunity?.score ?? -1) - (a.opportunity?.score ?? -1) },
 };
 
 const FLAG_FILTERS = [
@@ -107,13 +108,13 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
             </EmptyState>
           ) : (
             <div className="overflow-x-auto rounded-[3px] border border-border bg-panel">
-              <table className="w-full min-w-[980px] text-left text-[12px]">
+              <table className="w-full min-w-[1080px] text-left text-[12px]">
                 <thead className="text-[10px] uppercase tracking-wider text-faint">
                   <tr className="border-b border-border">
                     {[
                       ["rank", "#"], [null, "Product"], [null, "SKU"], [null, "Price"], ["units", "Units"],
                       ["net", "Net sales"], [null, "Orders/wk"], ["growth", "Growth"], ["stock", "Inventory"],
-                      ["cover", "Cover"], [null, "Signals"],
+                      ["cover", "Cover"], ["score", "Opportunity"], [null, "Signals"],
                     ].map(([key, label]) => (
                       <th key={label} className="px-2 py-2 font-medium">
                         {key ? (
@@ -160,6 +161,17 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                         <td className="px-2 py-2"><Change value={p.growth_pct} /></td>
                         <td className="num px-2 py-2">{p.available === null ? <span className="text-faint">untracked</span> : num(p.available)}</td>
                         <td className="num px-2 py-2 text-dim">{p.days_of_cover === null ? "—" : `${num(p.days_of_cover)}d`}</td>
+                        <td className="px-2 py-2" title={p.opportunity ? `${p.opportunity.summary} ${p.opportunity.disclaimer}` : undefined}>
+                          {p.opportunity ? (
+                            <span className="inline-flex items-center gap-1.5">
+                              <span className="num text-[13px]">{p.opportunity.score}</span>
+                              <span className="h-1 w-10 overflow-hidden rounded-full bg-panel-2" aria-hidden>
+                                <span className="block h-full bg-[var(--viz-pos)]" style={{ width: `${p.opportunity.score}%` }} />
+                              </span>
+                              <span className="text-[10px] text-faint">{p.opportunity.confidence}</span>
+                            </span>
+                          ) : <span className="text-faint">—</span>}
+                        </td>
                         <td className="px-2 py-2">
                           <div className="flex flex-wrap gap-1">
                             {p.flags.map((f) => <FlagChip key={f.key + f.label} label={f.label} reason={f.reason} tone={FLAG_TONE[f.key]} />)}
@@ -174,7 +186,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
           )}
           <p className="mt-3 text-[11px] text-faint">
             Seasonal demand: {seasonality === "available" ? "enough history to analyze (coming in Phase 4)." : seasonality}
-            {" "}Opportunity scores arrive with the AI analyst in Phase 4.
+            {" "}Opportunity score: a 0–100 relative ranking within your store to prioritise investigation, not a probability of success. Open a product to see how it is built.
           </p>
         </>
       )}

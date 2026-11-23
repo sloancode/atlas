@@ -139,6 +139,7 @@ export type ProductRow = {
   momentum_pct: number | null;
   flags: Flag[];
   in_catalog: boolean;
+  opportunity: Opportunity | null;
 };
 
 export type ProductsResponse = { meta: Meta; products: ProductRow[]; seasonality: string };
@@ -278,3 +279,104 @@ export function productIdFromGid(gid: string): string | null {
   const m = gid.match(/^gid:\/\/shopify\/Product\/(\d+)$/);
   return m ? m[1] : null;
 }
+
+// ------------------------------------------------------------ phase 4 types
+export type ScoreComponent = { name: string; points: number; max_points: number; reason: string };
+export type Opportunity = {
+  score: number;
+  confidence: "high" | "medium" | "low";
+  components: ScoreComponent[];
+  summary: string;
+  disclaimer: string;
+};
+
+export type ReportSummary = {
+  id: number;
+  kind: "daily" | "weekly";
+  period_start: string;
+  period_end: string;
+  generated_at: string;
+  narrative_status: "not_requested" | "generated" | "failed" | "not_configured";
+  alerts: number;
+  investigate: number;
+};
+
+export type NarrativeItem = { type: string; text: string; citations: string[]; verified: boolean; issues: string[] };
+export type Narrative = { summary?: string; sections?: NarrativeItem[]; model?: string; unverified?: number; error?: string };
+
+export type ReportFacts = {
+  kind: "daily" | "weekly";
+  shop: string | null;
+  currency: string;
+  timezone: string;
+  period: Period;
+  previous_period: Period;
+  data_status: DataStatusValue;
+  as_of: string | null;
+  notes: string[];
+  sections: {
+    revenue: Kpi[];
+    best_products: { title: string; net_sales: number; units: number; growth_pct: number | null }[];
+    weakest_products: { title: string; net_sales: number; units: number; growth_pct: number | null; available: number | null }[];
+    inventory_alerts: { title: string; status: string; available: number | null; days_of_cover: number | null; reason: string }[];
+    profitability: {
+      metrics: { key: string; label: string; kind: string; value: number | null; status: DataStatusValue }[];
+      missing_inputs: string[];
+      cogs_coverage_pct: number | null;
+    };
+    changes: { text: string; evidence: string }[];
+    investigate: { title: string; why: string; evidence: string }[];
+    daily_trend?: DailyPoint[];
+    movers?: { title: string; flag: string; reason: string }[];
+  };
+};
+
+export type ReportFull = ReportSummary & { facts: ReportFacts; narrative: Narrative | null };
+
+export type VerifiedItem = {
+  type: "fact" | "estimate" | "interpretation";
+  text: string;
+  citations: string[];
+  verified: boolean;
+  issues: string[];
+  cited_values: Record<string, unknown>;
+};
+
+export type AnalystAnswer = {
+  question: string;
+  summary: string;
+  items: VerifiedItem[];
+  insufficient_data: boolean;
+  follow_up_questions: string[];
+  verification: Record<string, number>;
+  model: string | null;
+  data_as_of: string | null;
+  generated_at: string;
+  disclaimer: string;
+};
+
+export const getReports = () => apiGet<ReportSummary[]>("/api/reports?limit=60");
+export const getReport = (id: string) => apiGet<ReportFull>(`/api/reports/${encodeURIComponent(id)}`);
+export const getAnalystStatus = () => apiGet<{ configured: boolean; model: string }>("/api/analyst/status");
+
+export async function apiPostJson<T>(path: string, body: unknown): Promise<ApiResult<T>> {
+  const fetchedAt = new Date().toISOString();
+  try {
+    const res = await fetch(`${BACKEND}${path}`, {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      const d = data?.detail;
+      return { ok: false, error: typeof d === "string" ? d : `HTTP ${res.status}`, fetchedAt };
+    }
+    return { ok: true, data: data as T, fetchedAt };
+  } catch {
+    return { ok: false, error: "ATLAS backend is unreachable", fetchedAt };
+  }
+}
+
+export const BACKEND_URL = BACKEND;

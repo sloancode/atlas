@@ -38,9 +38,16 @@ in your own Shopify organization.
 
 ## Claude API (AI analyst)
 
-`ANTHROPIC_API_KEY`, model from `ANTHROPIC_MODEL`. Separate from Claude Code. The analyst
-(Phase 4) receives only aggregated, retrieved data and must cite it; outputs separate facts,
-estimates and interpretation.
+| | |
+|---|---|
+| Key | `ANTHROPIC_API_KEY` from console.anthropic.com (separate from a Claude subscription and from Claude Code) |
+| SDK | official `anthropic` Python SDK, `client.beta.messages.create` |
+| Model | `ANTHROPIC_MODEL`, default `claude-opus-5-5`; adaptive thinking, effort `high` |
+| Output | structured JSON (`output_config.format` json_schema): typed items with citations |
+| Refusals | server-side fallback enabled (`server-side-fallback-2026-07-01`, `fallbacks: "default"`): if a safety check declines, the API retries on a fallback model. Remove those two lines in `app/services/ai.py` to opt out. |
+| Data sent | aggregated store metrics and product titles/numbers only — no customer data, no credentials |
+| Cost | one request per question or report narrative (a few cents each). `AI_REPORT_NARRATIVES=false` turns off automatic report narratives |
+| Without a key | reports and analytics work; the analyst and AI narratives show "not configured" |
 
 ## Massive (market data) — Phase 5
 
