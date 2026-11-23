@@ -1,4 +1,5 @@
-import { getSystemStatus, type ProviderStatus } from "@/lib/api";
+import { getStoreSettings, getSystemStatus, type ProviderStatus } from "@/lib/api";
+import { setDigitalOnly } from "@/app/autopilot-actions";
 import { Code, EmptyState, PageHeader, Panel, StateBadge } from "@/components/ui";
 import { ShopifyDataPanel } from "@/components/ShopifyDataPanel";
 
@@ -22,11 +23,11 @@ function ScopeList({ label, items, tone }: { label: string; items: unknown; tone
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ live?: string; sync?: string }>;
+  searchParams: Promise<{ live?: string; sync?: string; msg?: string }>;
 }) {
   const params = await searchParams;
   const live = params.live === "1";
-  const res = await getSystemStatus(live);
+  const [res, store] = await Promise.all([getSystemStatus(live), getStoreSettings()]);
 
   return (
     <>
@@ -91,6 +92,7 @@ export default async function SettingsPage({
                       <ScopeList label="Missing required scopes" items={p.details.missing_required_scopes} tone="text-neg" />
                       <ScopeList label="Missing optional scopes" items={p.details.missing_optional_scopes} tone="text-warn" />
                       <ScopeList label="Unneeded write scopes" items={p.details.unneeded_write_scopes} tone="text-warn" />
+                      <ScopeList label="Autopilot needs (add to enable store changes)" items={p.details.autopilot_missing_scopes} tone="text-info" />
                     </td>
                     <td className="py-2.5">
                       <div className="flex flex-wrap gap-1">
@@ -107,7 +109,30 @@ export default async function SettingsPage({
             </table>
           </Panel>
 
+          {params.msg && (
+            <div className="rounded-sm border border-border-strong bg-panel-2 px-3 py-2 text-[12px]">{params.msg}</div>
+          )}
           <ShopifyDataPanel message={params.sync} />
+
+          <Panel title="Store mode">
+            <form action={setDigitalOnly} className="flex flex-wrap items-center gap-3 text-[12px]">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" name="digital_only" defaultChecked={store.ok && store.data.digital_only} />
+                This store sells only digital products
+              </label>
+              <button className="rounded-sm border border-border-strong px-2 py-1 text-dim hover:border-accent hover:text-accent">Save</button>
+              <span className="text-[11px] text-faint">Shipping and packaging costs count as zero; stock rules don&apos;t apply.</span>
+            </form>
+          </Panel>
+
+          <Panel title="Enable Autopilot store changes">
+            <ol className="list-decimal space-y-1 pl-4 text-[12px] text-dim">
+              <li>Dev Dashboard → <span className="text-text">app named from claude</span> → new version: add <Code>write_products</Code> <Code>write_discounts</Code> <Code>read_publications</Code> <Code>write_publications</Code>.</li>
+              <li>Release the version and approve the new permissions in your Shopify admin.</li>
+              <li>Run the live connection check above: &quot;Autopilot write scopes granted&quot; should appear.</li>
+              <li>Install Shopify&apos;s free <span className="text-text">Digital Downloads</span> (or Digital Products) app to deliver files to buyers.</li>
+            </ol>
+          </Panel>
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Panel title="Connect Shopify (read-only)">
@@ -131,7 +156,7 @@ export default async function SettingsPage({
             </Panel>
             <Panel title="Safety guarantees">
               <ul className="list-disc space-y-1.5 pl-4 text-dim">
-                <li>The Shopify client rejects every GraphQL mutation before it is sent.</li>
+                <li>Analytics and sync use a read path that rejects every store change. Only Autopilot can change the store, through five pre-approved operations, within your limits, with every change logged.</li>
                 <li>No brokerage or bank connections exist; the paper portfolio is simulated.</li>
                 <li>Secrets live only in server environment variables and are redacted from logs.</li>
                 <li>Unavailable data is shown as unavailable, never estimated silently.</li>

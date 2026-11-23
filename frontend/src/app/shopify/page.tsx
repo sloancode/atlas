@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getInventory, getOverview, getProducts, productIdFromGid, type PeriodParams } from "@/lib/api";
+import { getInventory, getOverview, getProducts, getTraffic, productIdFromGid, type PeriodParams, type TrafficT } from "@/lib/api";
 import { money, num } from "@/lib/format";
 import { PeriodSelector } from "@/components/PeriodSelector";
 import { Change, KpiTile, MetaBar, NoSyncState } from "@/components/analytics";
@@ -11,7 +11,7 @@ const SECONDARY = ["discounts", "refunds_total", "units_returned", "shipping", "
 
 export default async function ShopifyPage({ searchParams }: { searchParams: Promise<PeriodParams> }) {
   const params = await searchParams;
-  const [ov, prods, inv] = await Promise.all([getOverview(params), getProducts(params), getInventory()]);
+  const [ov, prods, inv, traffic] = await Promise.all([getOverview(params), getProducts(params), getInventory(), getTraffic(params)]);
 
   if (!ov.ok) {
     return (
@@ -93,6 +93,11 @@ export default async function ShopifyPage({ searchParams }: { searchParams: Prom
             )}
           </Panel>
 
+          <Panel title="Traffic & conversion" className="mb-4"
+            right={<span className="text-[11px] text-faint">Shopify analytics (ShopifyQL){traffic.ok && traffic.data.as_of ? ` · fetched ${new Date(traffic.data.as_of).toLocaleTimeString()}` : ""}</span>}>
+            {traffic.ok ? <Funnel t={traffic.data} /> : <div className="text-[12px] text-neg">{traffic.error}</div>}
+          </Panel>
+
           <div className="grid gap-4 xl:grid-cols-3">
             <Panel title="Best performers (net sales)">
               {best.length ? (
@@ -170,3 +175,37 @@ function ProductList({
   );
 }
 
+
+function Funnel({ t }: { t: TrafficT }) {
+  if (t.status === "missing") return <div className="text-[12px] text-faint">{t.notes.join(" ") || "Unavailable."}</div>;
+  const steps = [
+    ["Sessions", t.sessions], ["Added to cart", t.cart_sessions], ["Reached checkout", t.checkout_sessions], ["Purchased", t.completed_sessions],
+  ] as const;
+  const top = t.sessions || 0;
+  return (
+    <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
+      <div className="space-y-2">
+        {steps.map(([label, v]) => (
+          <div key={label} className="grid grid-cols-[130px_1fr_90px] items-center gap-3 text-[12px]">
+            <span className="text-dim">{label}</span>
+            <div className="h-2 overflow-hidden rounded-full bg-panel-2" aria-hidden>
+              <div className="h-full bg-[var(--viz-pos)]" style={{ width: `${top && v !== null ? Math.max((v / top) * 100, v ? 2 : 0) : 0}%` }} />
+            </div>
+            <span className="num text-right">{v === null ? "—" : num(v)}{top && v !== null && label !== "Sessions" ? <span className="text-faint"> ({((v / top) * 100).toFixed(1)}%)</span> : null}</span>
+          </div>
+        ))}
+        <div className="text-[12px]">Conversion rate: <span className="num">{t.conversion_rate_pct === null ? "— (no sessions)" : `${t.conversion_rate_pct}%`}</span></div>
+        {t.notes.map((n) => <div key={n} className="text-[11px] text-faint">{n}</div>)}
+      </div>
+      <div>
+        <div className="mb-1 text-[10px] uppercase tracking-wider text-faint">Top traffic sources</div>
+        {t.sources.length === 0 ? <div className="text-[12px] text-faint">No sessions recorded.</div> : (
+          <ul className="space-y-1 text-[12px]">{t.sources.map((src) => (
+            <li key={src.source} className="flex justify-between"><span className="truncate text-dim">{src.source}</span>
+              <span className="num">{num(src.sessions)}{src.conversion_rate_pct !== null && <span className="text-faint"> · {src.conversion_rate_pct}%</span>}</span></li>
+          ))}</ul>
+        )}
+      </div>
+    </div>
+  );
+}

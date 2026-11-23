@@ -14,6 +14,7 @@ export const NAV: NavGroup[] = [
     items: [
       { href: "/", label: "Overview", code: "OVR", phase: 1 },
       { href: "/shopify", label: "Shopify", code: "SHP", phase: 3 },
+      { href: "/autopilot", label: "Autopilot", code: "AUT", phase: 7 },
       { href: "/products", label: "Products", code: "PRD", phase: 3 },
       { href: "/profitability", label: "Profitability", code: "PNL", phase: 3 },
       { href: "/inventory", label: "Inventory", code: "INV", phase: 3 },

@@ -17,8 +17,10 @@ never a placeholder number.
 | Auth | Dev Dashboard app + **client credentials grant** (`SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET`). Tokens are short-lived (~24h) and refreshed automatically. A legacy admin-created custom app token (`SHOPIFY_ADMIN_ACCESS_TOKEN`) is also accepted. |
 | Required scopes | `read_products`, `read_inventory`, `read_orders`, `read_locations` |
 | Optional scopes | `read_reports` (ShopifyQL analytics), `read_all_orders` (order history older than 60 days) |
-| Not requested | `read_customers` (not needed; avoids holding personal data), any `write_*` scope |
-| Safety | `ShopifyClient.query` rejects GraphQL mutations before sending |
+| Autopilot only | `write_products`, `write_discounts`, `read_publications`, `write_publications` (needed only to let the agent change the store) |
+| Not requested | `read_customers` (not needed; avoids holding personal data), other `write_*` scopes |
+| Safety | `ShopifyClient.query` rejects every mutation; Autopilot writes go through `raw_mutate`, which accepts only its five allow-listed documents (`app/services/autopilot/writer.py`) |
+| Analytics | ShopifyQL via `shopifyqlQuery` (`read_reports`): sessions, cart, checkout, conversion, traffic sources |
 | Sync | Full catalog sync (deleted items reconciled) + incremental orders by `updated_at`; hourly by default (`SHOPIFY_SYNC_INTERVAL_MINUTES`, 0 = off); manual `POST /api/shopify/sync` |
 | Limits | Cost-based throttling: on `THROTTLED`, waits `(requested − available) / restoreRate` seconds; 429/5xx retried with backoff (max 5 attempts) |
 

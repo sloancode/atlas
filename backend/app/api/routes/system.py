@@ -41,7 +41,17 @@ async def status(live: bool = False, settings: Settings = Depends(get_settings))
                     p.message = "Connected: last full sync succeeded."
                 else:
                     p.message = "Configured; last successful sync is over a day old."
+    try:
+        from app.db.session import get_session as _gs
+        from app.services.autopilot.guardrails import get_config
+
+        gen = _gs()
+        autopilot_active = get_config(next(gen)).active
+        gen.close()
+    except Exception:
+        autopilot_active = False
     return SystemStatus(
+        read_only=not autopilot_active,
         environment=settings.environment,
         database={"ok": ok, "message": msg},
         providers=list(results),

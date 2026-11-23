@@ -469,3 +469,24 @@ export async function apiSend<T>(method: "POST" | "PATCH" | "DELETE", path: stri
     return { ok: false, error: "ATLAS backend is unreachable", fetchedAt };
   }
 }
+
+// ------------------------------------------------------------ autopilot
+export type AutopilotConfigT = {
+  enabled: boolean; stopped: boolean; min_price: string; max_price: string; max_price_change_pct: number;
+  max_discount_pct: number; max_discount_days: number; max_actions_per_day: number; max_new_products_per_day: number;
+  allow_publish: boolean; daily_ai_budget_usd: string; max_steps_per_run: number; run_every_hours: number;
+};
+export type AgentRunT = { id: number; started_at: string; finished_at: string | null; trigger: string; status: string; summary: string | null; error: string | null; steps: number; est_cost_usd: number };
+export type AgentActionT = { id: number; run_id: number | null; created_at: string; action: string; target: string | null; status: "executed" | "blocked" | "failed"; reason: string | null; detail: string | null; params: Record<string, unknown> | null; before: Record<string, unknown> | null; after: Record<string, unknown> | null };
+export type AutopilotOverview = {
+  config: AutopilotConfigT; active: boolean; ready: { shopify: boolean; claude: boolean };
+  today: { actions: number; new_products: number; ai_spend_usd: number };
+  needs_you: { product_id: string; title: string; created_at: string; has_file: boolean }[];
+  products: { product_id: string; title: string; file_attached: boolean; published: boolean; created_at: string; concept: { subtitle?: string; sections?: string[] } | null }[];
+  runs: AgentRunT[]; actions: AgentActionT[];
+};
+export type TrafficT = { status: "historical" | "missing"; as_of: string | null; sessions: number | null; cart_sessions: number | null; checkout_sessions: number | null; completed_sessions: number | null; conversion_rate_pct: number | null; sources: { source: string; sessions: number | null; conversion_rate_pct: number | null }[]; notes: string[] };
+
+export const getAutopilot = () => apiGet<AutopilotOverview>("/api/autopilot");
+export const getTraffic = (p: PeriodParams) => apiGet<TrafficT>(`/api/analytics/traffic?${periodQuery(p)}`);
+export const getStoreSettings = () => apiGet<{ digital_only: boolean }>("/api/settings/store");

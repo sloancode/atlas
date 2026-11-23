@@ -47,7 +47,7 @@ export function Sidebar() {
         ))}
       </nav>
       <div className="border-t border-border px-4 py-3 text-[11px] leading-relaxed text-faint">
-        Read-only. ATLAS never changes your store, places orders or executes trades.
+        ATLAS changes your store only through Autopilot, within your limits, and never places orders, refunds or trades.
       </div>
     </aside>
   );

@@ -1,6 +1,6 @@
 # ATLAS — Project Status
 
-_Last updated: 2026-11-23 · Current phase: **5 complete — market research engine** → next: Phase 6 (unified platform, eBay module prep)_
+_Last updated: 2026-11-23 · Current phase: **Shopify Autopilot complete** (owner re-prioritised: Shopify first, eBay later) → next: owner setup + first live Autopilot run_
 
 ## Environment findings (inspection)
 
@@ -62,7 +62,13 @@ _Last updated: 2026-11-23 · Current phase: **5 complete — market research eng
 | Scanner: 7 presets + custom rules, every rule shown with its actual value, missing data never matches, no scores | tests + browser |
 | Watchlists with latest close/change; SIMULATED paper portfolio (fills at recorded end-of-day close with source and price date, average cost, no shorting, realized/unrealized P&L, equity curve, journal) | 6 tests (hand-computed ledger) + browser |
 
-Totals: **137 backend tests passing**, ruff clean, ESLint clean, production build OK.
+| **Shopify completion** — Traffic & conversion funnel + traffic sources (ShopifyQL validated on the live store) | 2 tests (fake client) + browser |
+| Digital-only store mode (shipping/packaging zero by definition, full stock-health score) | tests + browser |
+| Guarded writer: 5 allow-listed mutations (fields checked against the store's 2026-10 schema), own-products only, file-attached gate, code-enforced limits, full before/after audit log | 9 tests incl. allow-list enforced twice |
+| Autopilot agent (Claude tool loop, `claude-opus-5-5`, no fallback): stop switch re-checked each step, step limit, daily AI budget, PDF product generation | 6 tests (scripted Claude, fake Shopify); found+fixed multi-bullet PDF bug |
+| Autopilot page: status, STOP/Resume, Run now, limits, Needs-you file queue with PDF download + confirmation, action log, runs; top bar shows Autopilot mode | browser (TEST data in demo DB) |
+
+Totals: **156 backend tests passing**, ruff clean, ESLint clean, production build OK.
 
 ## Incomplete / not started
 
@@ -73,6 +79,12 @@ Totals: **137 backend tests passing**, ruff clean, ESLint clean, production buil
 - App-level user authentication — ATLAS currently assumes a single local user; required before any deployment beyond localhost.
 
 ## Current bugs / limitations
+
+- **Autopilot has never run against the real store or the real Claude API**: needs write scopes,
+  `ANTHROPIC_API_KEY`, and the owner enabling it. Verified with scripted Claude + fake Shopify,
+  and the mutation field names were checked against the live schema (writes were not executed).
+- Shopify provides no API to attach download files; the owner attaches each PDF (≈30 s/product).
+- PDFs use built-in fonts (Latin-1): non-Latin characters are dropped.
 
 - No known bugs. Fixed during testing: `.env.example`'s `CORS_ORIGINS` crashed config loading,
   and blank keys (e.g. `FMP_API_KEY=`) counted as configured — now covered by a test that loads
@@ -104,19 +116,19 @@ Totals: **137 backend tests passing**, ruff clean, ESLint clean, production buil
 | Variable | For | Needed by |
 |---|---|---|
 | `SHOPIFY_STORE_DOMAIN`, `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET` | Shopify engine | ✅ set on owner's machine |
-| `ANTHROPIC_API_KEY` | AI analyst & report narratives | Phase 4 (optional; not set) |
+| `ANTHROPIC_API_KEY` | AI analyst, report narratives, **Autopilot** | required for Autopilot (not set) |
 | `MASSIVE_API_KEY` and/or `FMP_API_KEY` | Prices, profiles, news (Massive); financials, earnings (FMP) | Phase 5 (optional; not set) |
 | `SEC_USER_AGENT` | SEC EDGAR financials (free; your name + email) | Phase 5 (optional; not set) |
 
 ## Missing permissions
 
-- None blocking. Optional: `read_all_orders` (protected; requires a request to Shopify) for
+- **Autopilot:** `write_products`, `write_discounts`, `read_publications`, `write_publications` (not yet granted).
+- Optional: `read_all_orders` (protected; requires a request to Shopify) for
   order history beyond 60 days. `read_product_feeds` on the app is unused and could be removed.
 
 ## Next steps
 
-1. Owner: `git pull` and restart (`./scripts/run.sh`). Optionally add `ANTHROPIC_API_KEY` to
-   `backend/.env` to enable the analyst; then ask a question to confirm the live API works.
-2. Optional: add `SEC_USER_AGENT` (free) and/or `MASSIVE_API_KEY` / `FMP_API_KEY`, then research a
-   ticker to confirm live data (especially FMP field mappings).
-3. Phase 6: unified dashboard, eBay module preparation, cross-platform data model.
+1. Owner: follow docs/AUTOPILOT.md setup checklist (scopes, Digital Downloads app, API key, digital
+   mode, paid plan), then enable Autopilot and press **Run now**.
+2. Review the first run's action log and PDFs; tune limits.
+3. Later (deferred by owner): eBay integration; unified dashboard; market research with live keys.

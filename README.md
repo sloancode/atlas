@@ -4,10 +4,13 @@ Personal business intelligence and market research platform.
 
 - **Shopify engine**: sales, product, profitability and inventory analytics for your store (read-only).
 - **Market research engine**: US stock/ETF research, scanner and a *simulated* paper portfolio.
+- **Shopify Autopilot**: optional AI agent that creates, prices and publishes digital products within your limits.
 - **eBay module**: architecture prepared; intentionally not connected.
 
-ATLAS is **read-only by design**. It never changes prices, products, inventory,
-orders, refunds or customers, never places orders, and never executes trades.
+ATLAS reads your store without changing it, **unless you enable Shopify Autopilot**: an AI agent
+that runs a digital-products store within code-enforced limits (see [docs/AUTOPILOT.md](docs/AUTOPILOT.md)).
+Even then it never deletes anything, never touches orders, refunds, customers or payments, and
+ATLAS never places market trades (the paper portfolio is simulated).
 
 ## Layout
 
