@@ -42,6 +42,10 @@ PROJECT_STATUS.md   what works, what doesn't, what's needed
    nano backend/.env
    ```
    Fill in `SHOPIFY_CLIENT_ID=` and `SHOPIFY_CLIENT_SECRET=`, then **Ctrl+O, Enter, Ctrl+X**.
+   Check them (prints Shopify's answer, never the secret):
+   ```bash
+   ./scripts/check-shopify.sh
+   ```
 5. Start ATLAS (leave the Terminal window open; **Ctrl+C** stops it):
    ```bash
    ./scripts/run.sh
