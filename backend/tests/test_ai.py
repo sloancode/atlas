@@ -56,7 +56,7 @@ class FakeMessages:
 
 def fake_client(**kw):
     m = FakeMessages(**kw)
-    return SimpleNamespace(beta=SimpleNamespace(messages=m)), m
+    return SimpleNamespace(messages=m), m
 
 
 @pytest.fixture
@@ -182,10 +182,10 @@ async def test_ask_analyst_end_to_end(factory, settings) -> None:
         "kpi_7d.net_sales.current": 86.0,
         "kpi_7d.net_sales.previous": 70.0,
     }
-    # Request shape: model, structured output, adaptive thinking, server-side refusal fallback.
+    # Request: model, structured output, adaptive thinking; refusal fallback OFF (owner's choice).
     call = msgs.calls[0]
     assert call["model"] == "claude-opus-5-5"
-    assert call["fallbacks"] == "default" and call["betas"] == ["server-side-fallback-2026-07-01"]
+    assert "fallbacks" not in call and "betas" not in call
     assert call["thinking"] == {"type": "adaptive"}
     assert call["output_config"]["effort"] == "high"
     assert call["output_config"]["format"]["type"] == "json_schema"

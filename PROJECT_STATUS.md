@@ -51,8 +51,8 @@ _Last updated: 2026-11-23 · Current phase: **4 complete — AI business intelli
 
 | **Phase 4** — Opportunity score 0–100 with per-part reasons and confidence (docs/METRICS.md) | 17 tests incl. hand-computed dataset scores |
 | Daily/weekly reports (7 sections; weekly adds trend + momentum), stored, catch-up after each successful sync, Markdown/CSV export | 5 report tests + 3 API tests + browser download |
-| AI analyst (Claude API, `claude-opus-5-5`): data pack with fact IDs, structured typed answers with citations, verification in code, refusal fallback, clear errors, graceful no-key state | 16 tests (fake client) + end-to-end through the real SDK against a local mock API + browser |
-| Optional AI interpretation on reports (labeled, verified; failure leaves the report intact) | tests + browser |
+| AI analyst (Claude API, `claude-opus-5-5`): data pack with fact IDs, structured typed answers with citations, verification in code, refusal fallback off (owner's choice), clear errors, graceful no-key state | 16 tests (fake client) + end-to-end through the real SDK against a local mock API + browser |
+| Optional AI interpretation on reports, on request only (automatic narratives off by owner's choice; labeled, verified; failure leaves the report intact) | tests + browser |
 
 Totals: **112 backend tests passing**, ruff clean, ESLint clean, production build OK.
 

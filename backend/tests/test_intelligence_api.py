@@ -36,7 +36,9 @@ def test_report_lifecycle_without_ai(no_key) -> None:
     r = no_key.post("/api/reports/generate", json={"kind": "weekly"})
     assert r.status_code == 200, r.text
     rep = r.json()
-    assert rep["kind"] == "weekly" and rep["narrative_status"] == "not_configured"
+    assert rep["kind"] == "weekly" and rep["narrative_status"] == "not_requested"  # AI is opt-in
+    narr = no_key.post(f"/api/reports/{rep['id']}/narrative").json()
+    assert narr["narrative_status"] == "not_configured"
     assert rep["facts"]["sections"]["investigate"]
     assert [x["id"] for x in no_key.get("/api/reports").json()] == [rep["id"]]
     assert no_key.get(f"/api/reports/{rep['id']}").json()["facts"] == rep["facts"]

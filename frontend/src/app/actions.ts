@@ -58,7 +58,7 @@ export async function saveAlertRule(form: FormData) {
 
 export async function generateReport(form: FormData) {
   const kind = form.get("kind") === "weekly" ? "weekly" : "daily";
-  const res = await apiPostJson<ReportFull>("/api/reports/generate", { kind, with_ai: true });
+  const res = await apiPostJson<ReportFull>("/api/reports/generate", { kind, with_ai: false });
   revalidatePath("/reports");
   if (!res.ok) redirect(`/reports?msg=${encodeURIComponent(`Report not generated: ${res.error}`)}`);
   redirect(`/reports?id=${res.data.id}`);

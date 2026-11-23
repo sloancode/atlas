@@ -41,12 +41,12 @@ in your own Shopify organization.
 | | |
 |---|---|
 | Key | `ANTHROPIC_API_KEY` from console.anthropic.com (separate from a Claude subscription and from Claude Code) |
-| SDK | official `anthropic` Python SDK, `client.beta.messages.create` |
+| SDK | official `anthropic` Python SDK, `client.messages.create` |
 | Model | `ANTHROPIC_MODEL`, default `claude-opus-5-5`; adaptive thinking, effort `high` |
 | Output | structured JSON (`output_config.format` json_schema): typed items with citations |
-| Refusals | server-side fallback enabled (`server-side-fallback-2026-07-01`, `fallbacks: "default"`): if a safety check declines, the API retries on a fallback model. Remove those two lines in `app/services/ai.py` to opt out. |
+| Refusals | refusal fallback **off** (owner's choice): if Claude declines, ATLAS reports it instead of retrying on another model. Uses the standard `client.messages.create` endpoint. |
 | Data sent | aggregated store metrics and product titles/numbers only — no customer data, no credentials |
-| Cost | one request per question or report narrative (a few cents each). `AI_REPORT_NARRATIVES=false` turns off automatic report narratives |
+| Cost | one request per question, or per report narrative you request (a few cents each). Automatic report narratives are off (`AI_REPORT_NARRATIVES=false`); set it to `true` to turn them on |
 | Without a key | reports and analytics work; the analyst and AI narratives show "not configured" |
 
 ## Massive (market data) — Phase 5

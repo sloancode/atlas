@@ -32,7 +32,6 @@ log = logging.getLogger(__name__)
 
 MAX_PRODUCTS_IN_PACK = 40
 MAX_QUESTION_CHARS = 2000
-FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 
 class AIError(Exception):
@@ -232,11 +231,11 @@ async def call_claude(
     """Send the pack + question; return the parsed answer and call metadata."""
     client = client or _claude_client(settings)
     try:
-        response = await client.beta.messages.create(
+        # Refusal fallback intentionally off (owner's choice): a declined request is reported,
+        # not retried on another model.
+        response = await client.messages.create(
             model=settings.anthropic_model,
             max_tokens=16000,
-            betas=[FALLBACK_BETA],
-            fallbacks="default",  # server-side retry on a fallback model if a safety check declines
             thinking={"type": "adaptive"},
             output_config={
                 "effort": "high",

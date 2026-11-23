@@ -70,7 +70,7 @@ def list_reports(
 
 class GenerateIn(BaseModel):
     kind: Literal["daily", "weekly"]
-    with_ai: bool = True
+    with_ai: bool = False  # AI narrative only when explicitly requested
 
 
 async def _attach_narrative(s: Session, r: Report, settings: Settings) -> None:
