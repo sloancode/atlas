@@ -1,6 +1,6 @@
 # ATLAS — Project Status
 
-_Last updated: 2026-11-23 · Current phase: **2 complete (Shopify sync, live run pending credentials)** → next: Phase 3 (Shopify analytics)_
+_Last updated: 2026-11-23 · Current phase: **2 complete — live Shopify sync verified on owner's Chromebook** → next: Phase 3 (Shopify analytics)_
 
 ## Environment findings (inspection)
 
@@ -40,11 +40,12 @@ _Last updated: 2026-11-23 · Current phase: **2 complete (Shopify sync, live run
 
 | Chromebook/Linux scripts: `scripts/setup-linux.sh` (idempotent; never handles the secret), `scripts/run.sh` | end-to-end on a fresh Ubuntu 24.04 container: setup ×2, run, API + UI + sync endpoint checked |
 
+| `scripts/check-shopify.sh`: validates saved credentials and token exchange without revealing secrets | mock endpoint tests; used successfully by owner |
+
 Totals: **43 backend tests passing**, ruff clean, ESLint clean, production build OK.
 
 ## Incomplete / not started
 
-- Phase 2 live run: the sync has never run against the real store through ATLAS (needs credentials in `backend/.env`).
 - Phase 3: executive dashboard, product analytics, profitability, inventory monitoring, date comparisons.
 - Phase 4: AI analyst, opportunity score, daily/weekly reports, export.
 - Phase 5: market data fetching, indicators, research reports, scanner, watchlists, paper portfolio.
@@ -61,16 +62,20 @@ Totals: **43 backend tests passing**, ruff clean, ESLint clean, production build
 - Orders older than 60 days are unavailable without the protected `read_all_orders` scope.
 - Order line-item quantities are as placed; refunded quantities live in `refund_lines` and
   are subtracted in Phase 3 analytics (not yet implemented).
-- Live Shopify connectivity through ATLAS is **unverified** until app credentials exist.
+- **Live Shopify verified (2026-11-22, owner's Chromebook):** token exchange succeeded
+  (`scripts/check-shopify.sh`), two full syncs succeeded (1 location, 0 products/orders —
+  matches the store).
+- UX gap: Settings shows "Configured; not yet verified" after a successful sync unless the
+  live check is run; should reflect the last successful sync.
 - Setup script tested on Ubuntu 24.04, not Debian 12 (ChromeOS's Linux): Debian mirrors and the
   NodeSource/uv installer hosts are blocked in the cloud test environment, so those two
   downloads were pre-provided in the test. Same apt/PostgreSQL code paths otherwise.
 
-## Required credentials (none are present yet)
+## Required credentials
 
 | Variable | For | Needed by |
 |---|---|---|
-| `SHOPIFY_STORE_DOMAIN`, `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET` | Shopify engine | Phase 2 |
+| `SHOPIFY_STORE_DOMAIN`, `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET` | Shopify engine | ✅ set on owner's machine |
 | `ANTHROPIC_API_KEY` | AI analyst & reports | Phase 4 |
 | `MASSIVE_API_KEY` and/or `FMP_API_KEY` | Market data | Phase 5 |
 | `SEC_USER_AGENT` | SEC EDGAR | Phase 5 |
@@ -82,7 +87,5 @@ Totals: **43 backend tests passing**, ruff clean, ESLint clean, production build
 
 ## Next steps
 
-1. Owner (Chromebook): follow README → "Run on a Chromebook", add the client ID/secret to
-   `backend/.env`, then Settings → live check → Sync now. Confirms end-to-end access.
-2. Phase 3: executive dashboard, product analytics, profitability (cost inputs UI), inventory
+1. Phase 3: executive dashboard, product analytics, profitability (cost inputs UI), inventory
    coverage, period comparisons — tested on labeled fixtures since the store has no orders.
