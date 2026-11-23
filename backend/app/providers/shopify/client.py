@@ -110,7 +110,17 @@ class ShopifyClient:
     async def query(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
         if _MUTATION_RE.match(query):
             raise ReadOnlyViolation("ATLAS is read-only: GraphQL mutations are blocked")
+        return await self._post(query, variables)
 
+    async def raw_mutate(self, document: str, variables: dict[str, Any]) -> dict[str, Any]:
+        """Write path used ONLY by the Autopilot writer, for its allow-listed documents."""
+        from app.services.autopilot.writer import ALLOWED_MUTATIONS  # local import: no cycle
+
+        if document not in ALLOWED_MUTATIONS:
+            raise ReadOnlyViolation("Mutation is not on the Autopilot allow-list")
+        return await self._post(document, variables)
+
+    async def _post(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
         payload = {"query": query, "variables": variables or {}}
         for attempt in range(1, _MAX_ATTEMPTS + 1):
             token = await self._get_token()

@@ -49,6 +49,7 @@ class ScoreInputs:
     min_units: int
     min_days_of_cover: int
     max_days_of_cover: int
+    digital: bool = False  # digital products have no stock limits
 
 
 def _clamp(x: float, lo: float = 0.0, hi: float = 1.0) -> float:
@@ -94,7 +95,9 @@ def score_product(i: ScoreInputs, max_velocity: float, max_sales_90d: float) -> 
 
     # Inventory health
     selling = i.velocity > 0
-    if i.available is None:
+    if i.digital and i.available is None:
+        pts, why = 20.0, "Digital product: no stock to run out of or tie up cash."
+    elif i.available is None:
         pts, why = (
             10.0,
             "Inventory not tracked in Shopify, so availability is unknown. Scored neutral.",

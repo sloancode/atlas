@@ -14,6 +14,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings, get_settings
 from app.db.models import (
     CostBasis,
     CostInput,
@@ -299,3 +300,40 @@ def put_variant_costs(body: list[VariantCostIn], s: Session = Depends(get_sessio
         _set(s, r.variant_gid, CostType.COGS, CostBasis.PER_UNIT, r.cogs, currency)
     s.commit()
     return body
+
+
+# ------------------------------------------------------------------ traffic
+@router.get("/traffic")
+async def traffic_funnel(
+    period: PeriodKey = PeriodQ,
+    start: date | None = None,
+    end: date | None = None,
+    s: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+):
+    from app.services.analytics.traffic import traffic
+
+    _, cur, _ = _windows(s, period, start, end)
+    return await traffic(s, settings, cur)
+
+
+# ------------------------------------------------------------ store settings
+settings_router = APIRouter(prefix="/api/settings", tags=["settings"])
+
+
+class StoreSettingsIn(BaseModel):
+    digital_only: bool
+
+
+@settings_router.get("/store")
+def get_store(s: Session = Depends(get_session)):
+    from app.services.store_settings import get_store_settings
+
+    return get_store_settings(s)
+
+
+@settings_router.put("/store")
+def put_store(body: StoreSettingsIn, s: Session = Depends(get_session)):
+    from app.services.store_settings import set_store_settings
+
+    return set_store_settings(s, digital_only=body.digital_only)

@@ -74,7 +74,8 @@ def factory(engine):
                 "shopify.inventory_levels, shopify.orders, shopify.order_lines, shopify.refunds, "
                 "shopify.refund_lines, shopify.cost_inputs, shopify.inventory_alert_rules, "
                 "shopify.reports, market.cache, market.watchlists, market.watchlist_items, "
-                "market.research_reports, paper.accounts, paper.trades, "
+                "market.research_reports, paper.accounts, paper.trades, core.agent_runs, "
+                "core.agent_actions, shopify.autopilot_products, "
                 "core.sync_runs, core.app_settings RESTART IDENTITY"
             )
         )

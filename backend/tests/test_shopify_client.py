@@ -134,12 +134,15 @@ async def test_provider_connected_with_required_scopes(shopify_settings: Setting
 async def test_provider_flags_missing_and_write_scopes(shopify_settings: Settings) -> None:
     _token_route()
     respx.post(GQL_URL).mock(
-        return_value=httpx.Response(200, json=_verify_payload(["read_products", "write_products"]))
+        return_value=httpx.Response(
+            200, json=_verify_payload(["read_products", "write_products", "write_customers"])
+        )
     )
     st = await ShopifyProvider(shopify_settings).check()
     assert st.state == ConnectionState.ERROR
     assert "read_orders" in st.details["missing_required_scopes"]
-    assert st.details["unneeded_write_scopes"] == ["write_products"]
+    assert st.details["unneeded_write_scopes"] == ["write_customers"]  # write_products: Autopilot
+    assert "write_discounts" in st.details["autopilot_missing_scopes"]
 
 
 async def test_provider_not_configured(empty_settings: Settings) -> None:

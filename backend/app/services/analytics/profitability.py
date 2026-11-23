@@ -251,6 +251,15 @@ def profitability(s: Session, ctx: ShopContext, cur: Window) -> ProfitabilityRes
 
     # ---- variable (per-order) costs
     var_missing = list(cogs_missing)
+    from app.services.store_settings import get_store_settings
+
+    digital = get_store_settings(s)["digital_only"]
+    digital_note: list[str] = []
+    if digital:  # owner declared a digital-only store: nothing ships or gets packed
+        for f in ("shipping_cost_per_order", "packaging_cost_per_order"):
+            if store[f] is None:
+                store[f] = Decimal(0)
+        digital_note = ["Digital-only store: shipping and packaging costs are zero."]
     ship = store["shipping_cost_per_order"]
     pack = store["packaging_cost_per_order"]
     fee_pct = store["transaction_fee_percent"]
@@ -280,6 +289,7 @@ def profitability(s: Session, ctx: ShopContext, cur: Window) -> ProfitabilityRes
         None if all_order_costs_unknown else variable,
         [m for m in var_missing if m not in cogs_missing],
         "Orders x (shipping + packaging + fixed fee) + fee % x amount collected",
+        digital_note,
     )
     add(
         "contribution",

@@ -445,6 +445,9 @@ def products_report(
             ),
         )
     # Opportunity score (catalog products only), relative to this store's leaders.
+    from app.services.store_settings import get_store_settings
+
+    digital = get_store_settings(s)["digital_only"]
     scored = [r for r in rows if r.in_catalog]
     max_velocity = max(
         (max(r30.get(r.product_gid, Agg()).net_units, 0) / 30 for r in scored), default=0.0
@@ -467,6 +470,7 @@ def products_report(
                 min_units=t.min_units,
                 min_days_of_cover=t.min_days_of_cover,
                 max_days_of_cover=t.max_days_of_cover,
+                digital=digital,
             ),
             max_velocity=max_velocity,
             max_sales_90d=max_sales_90d,

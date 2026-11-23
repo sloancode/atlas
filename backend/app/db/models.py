@@ -404,3 +404,65 @@ class PaperTrade(Base):
     )
     thesis: Mapped[str | None] = mapped_column(Text)  # trade journal
     lesson: Mapped[str | None] = mapped_column(Text)
+
+
+# ============================================================================
+# Shopify Autopilot (AI agent with guarded write access)
+# ============================================================================
+
+
+class AgentRun(Base):
+    __tablename__ = "agent_runs"
+    __table_args__ = {"schema": "core"}
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    trigger: Mapped[str] = mapped_column(String(20))  # schedule | manual
+    status: Mapped[str] = mapped_column(
+        String(20)
+    )  # running | succeeded | failed | stopped | skipped
+    summary: Mapped[str | None] = mapped_column(Text)
+    steps: Mapped[int] = mapped_column(default=0)
+    input_tokens: Mapped[int] = mapped_column(default=0)
+    output_tokens: Mapped[int] = mapped_column(default=0)
+    est_cost_usd: Mapped[Decimal] = mapped_column(Numeric(10, 4), default=0)
+    error: Mapped[str | None] = mapped_column(Text)
+
+
+class AgentAction(Base):
+    """Every attempted store change, allowed or blocked, with before/after."""
+
+    __tablename__ = "agent_actions"
+    __table_args__ = {"schema": "core"}
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int | None] = mapped_column(index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+    action: Mapped[str] = mapped_column(String(40))
+    target: Mapped[str | None] = mapped_column(String(80))
+    status: Mapped[str] = mapped_column(String(20))  # executed | blocked | failed
+    reason: Mapped[str | None] = mapped_column(Text)  # agent's stated rationale
+    detail: Mapped[str | None] = mapped_column(Text)  # why blocked / error
+    params: Mapped[dict | None] = mapped_column(JSON)
+    before: Mapped[dict | None] = mapped_column(JSON)
+    after: Mapped[dict | None] = mapped_column(JSON)
+
+
+class AutopilotProduct(Base):
+    """Products the agent created. It may only modify products listed here."""
+
+    __tablename__ = "autopilot_products"
+    __table_args__ = {"schema": "shopify"}
+
+    product_gid: Mapped[str] = mapped_column(String(80), primary_key=True)
+    variant_gid: Mapped[str] = mapped_column(String(80))
+    title: Mapped[str] = mapped_column(Text)
+    file_path: Mapped[str | None] = mapped_column(Text)  # generated PDF on this machine
+    file_attached: Mapped[bool] = mapped_column(default=False)  # owner confirmed upload in Shopify
+    file_attached_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    published: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    concept: Mapped[dict | None] = mapped_column(JSON)

@@ -63,7 +63,12 @@ class ShopifyProvider(Provider):
         }
         missing_required = sorted(SHOPIFY_REQUIRED_SCOPES - granted)
         missing_optional = sorted(SHOPIFY_OPTIONAL_SCOPES - granted)
-        write_scopes = sorted(s for s in granted if s.startswith("write_"))
+        from app.services.autopilot.writer import AUTOPILOT_SCOPES
+
+        write_scopes = sorted(
+            s for s in granted if s.startswith("write_") and s not in AUTOPILOT_SCOPES
+        )
+        autopilot_missing = sorted(AUTOPILOT_SCOPES - granted)
 
         details: dict[str, object] = {
             "shop_name": shop.get("name"),
@@ -74,6 +79,7 @@ class ShopifyProvider(Provider):
             "missing_required_scopes": missing_required,
             "missing_optional_scopes": missing_optional,
             "unneeded_write_scopes": write_scopes,
+            "autopilot_missing_scopes": autopilot_missing,
         }
         if missing_required:
             return self._status(
@@ -81,7 +87,11 @@ class ShopifyProvider(Provider):
                 f"Connected, but missing required scopes: {', '.join(missing_required)}",
                 details=details,
             )
-        msg = "Connected (read-only)."
+        msg = "Connected." + (
+            " Read-only (Autopilot scopes not granted)."
+            if autopilot_missing
+            else " Autopilot write scopes granted."
+        )
         if write_scopes:
-            msg += " Warning: app has write scopes ATLAS does not need; consider removing them."
+            msg += " Warning: app has write scopes ATLAS does not use; consider removing them."
         return self._status(ConnectionState.CONNECTED, msg, details=details)
