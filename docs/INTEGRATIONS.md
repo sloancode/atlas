@@ -19,6 +19,7 @@ never a placeholder number.
 | Optional scopes | `read_reports` (ShopifyQL analytics), `read_all_orders` (order history older than 60 days) |
 | Not requested | `read_customers` (not needed; avoids holding personal data), any `write_*` scope |
 | Safety | `ShopifyClient.query` rejects GraphQL mutations before sending |
+| Sync | Full catalog sync (deleted items reconciled) + incremental orders by `updated_at`; hourly by default (`SHOPIFY_SYNC_INTERVAL_MINUTES`, 0 = off); manual `POST /api/shopify/sync` |
 | Limits | Cost-based throttling: on `THROTTLED`, waits `(requested − available) / restoreRate` seconds; 429/5xx retried with backoff (max 5 attempts) |
 
 **Setup**

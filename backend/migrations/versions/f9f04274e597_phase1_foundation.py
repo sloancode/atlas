@@ -98,3 +98,7 @@ def downgrade() -> None:
     op.drop_table('operating_expenses', schema='core')
     op.drop_table('app_settings', schema='core')
     # ### end Alembic commands ###
+    # Autogenerate does not drop Postgres enum types; do it explicitly so the
+    # migration can be rolled back and re-applied cleanly.
+    for enum in ("core.sync_status", "core.platform", "shopify.cost_type", "shopify.cost_basis"):
+        op.execute(f"DROP TYPE IF EXISTS {enum}")

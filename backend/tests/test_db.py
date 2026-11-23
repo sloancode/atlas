@@ -26,7 +26,5 @@ def test_database_ok_reports_migration() -> None:
 
 def test_platform_schemas_exist() -> None:
     with get_engine().connect() as conn:
-        rows = conn.execute(
-            text("SELECT schema_name FROM information_schema.schemata")
-        ).scalars()
+        rows = conn.execute(text("SELECT schema_name FROM information_schema.schemata")).scalars()
         assert {"core", "shopify", "ebay", "market", "paper"} <= set(rows)

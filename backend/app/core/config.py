@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     shopify_client_secret: SecretStr | None = None
     # Legacy admin-created custom app token (only if you already have one).
     shopify_admin_access_token: SecretStr | None = None
+    # Background sync cadence; 0 disables the scheduler (manual sync still works).
+    shopify_sync_interval_minutes: int = Field(default=60, ge=0)
 
     # --- AI analysis (Claude API, separate from Claude Code) -----------------
     anthropic_api_key: SecretStr | None = None

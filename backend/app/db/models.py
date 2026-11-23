@@ -150,3 +150,136 @@ class InventoryAlertRule(Base):
     min_days_of_cover: Mapped[int | None]
     max_days_of_cover: Mapped[int | None]  # overstock threshold
     enabled: Mapped[bool] = mapped_column(default=True)
+
+
+# ============================================================================
+# Shopify catalog, inventory and orders (Phase 2)
+#
+# Money is stored in the shop's currency (Shopify "shopMoney") as NUMERIC.
+# No customer personal data is stored: orders keep only commercial fields.
+# ============================================================================
+
+
+class ShopifyProduct(Base):
+    __tablename__ = "products"
+    __table_args__ = {"schema": "shopify"}
+
+    gid: Mapped[str] = mapped_column(String(80), primary_key=True)
+    title: Mapped[str] = mapped_column(Text)
+    handle: Mapped[str] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(20))  # ACTIVE / DRAFT / ARCHIVED
+    vendor: Mapped[str | None] = mapped_column(String(255))
+    product_type: Mapped[str | None] = mapped_column(String(255))
+    image_url: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class ShopifyVariant(Base):
+    __tablename__ = "variants"
+    __table_args__ = {"schema": "shopify"}
+
+    gid: Mapped[str] = mapped_column(String(80), primary_key=True)
+    product_gid: Mapped[str] = mapped_column(String(80), index=True)
+    title: Mapped[str] = mapped_column(Text)
+    sku: Mapped[str | None] = mapped_column(String(255), index=True)
+    price: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    compare_at_price: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    inventory_item_gid: Mapped[str | None] = mapped_column(String(80), index=True)
+    inventory_tracked: Mapped[bool | None]
+    # "Cost per item" as entered by the merchant in Shopify (NULL if not entered).
+    shopify_unit_cost: Mapped[Decimal | None] = mapped_column(Numeric(14, 4))
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class ShopifyLocation(Base):
+    __tablename__ = "locations"
+    __table_args__ = {"schema": "shopify"}
+
+    gid: Mapped[str] = mapped_column(String(80), primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    is_active: Mapped[bool]
+    synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class ShopifyInventoryLevel(Base):
+    __tablename__ = "inventory_levels"
+    __table_args__ = (
+        UniqueConstraint("inventory_item_gid", "location_gid", name="uq_inventory_level"),
+        {"schema": "shopify"},
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    inventory_item_gid: Mapped[str] = mapped_column(String(80), index=True)
+    location_gid: Mapped[str] = mapped_column(String(80))
+    available: Mapped[int | None]
+    on_hand: Mapped[int | None]
+    committed: Mapped[int | None]
+    incoming: Mapped[int | None]
+    synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class ShopifyOrder(Base):
+    __tablename__ = "orders"
+    __table_args__ = {"schema": "shopify"}
+
+    gid: Mapped[str] = mapped_column(String(80), primary_key=True)
+    name: Mapped[str] = mapped_column(String(50))  # e.g. "#1001"
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    is_test: Mapped[bool] = mapped_column(default=False)
+    currency: Mapped[str] = mapped_column(String(3))
+    financial_status: Mapped[str | None] = mapped_column(String(40))
+    source_name: Mapped[str | None] = mapped_column(String(100))
+    subtotal: Mapped[Decimal] = mapped_column(Numeric(14, 2))  # after line discounts
+    total_discounts: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    total_shipping: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    total_tax: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    total_price: Mapped[Decimal] = mapped_column(Numeric(14, 2))  # as originally placed
+    total_refunded: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    line_items_complete: Mapped[bool] = mapped_column(default=True)
+    synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class ShopifyOrderLine(Base):
+    __tablename__ = "order_lines"
+    __table_args__ = {"schema": "shopify"}
+
+    gid: Mapped[str] = mapped_column(String(80), primary_key=True)
+    order_gid: Mapped[str] = mapped_column(String(80), index=True)
+    product_gid: Mapped[str | None] = mapped_column(String(80), index=True)
+    variant_gid: Mapped[str | None] = mapped_column(String(80), index=True)
+    title: Mapped[str] = mapped_column(Text)
+    sku: Mapped[str | None] = mapped_column(String(255))
+    quantity: Mapped[int]
+    original_unit_price: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    original_total: Mapped[Decimal] = mapped_column(Numeric(14, 2))  # qty x unit, pre-discount
+    total_discount: Mapped[Decimal] = mapped_column(Numeric(14, 2))  # allocated discounts
+
+
+class ShopifyRefund(Base):
+    __tablename__ = "refunds"
+    __table_args__ = {"schema": "shopify"}
+
+    gid: Mapped[str] = mapped_column(String(80), primary_key=True)
+    order_gid: Mapped[str] = mapped_column(String(80), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    total_refunded: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+
+
+class ShopifyRefundLine(Base):
+    __tablename__ = "refund_lines"
+    __table_args__ = (
+        UniqueConstraint("refund_gid", "line_item_gid", name="uq_refund_line"),
+        {"schema": "shopify"},
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    refund_gid: Mapped[str] = mapped_column(String(80), index=True)
+    line_item_gid: Mapped[str] = mapped_column(String(80), index=True)
+    quantity: Mapped[int]
+    subtotal: Mapped[Decimal] = mapped_column(Numeric(14, 2))

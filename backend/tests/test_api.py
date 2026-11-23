@@ -23,3 +23,11 @@ def test_status_lists_providers_without_secrets(shopify_settings: Settings) -> N
     assert states["ebay"] == "planned"
     assert states["massive"] == "not_configured"
     assert data["read_only"] is True
+
+
+def test_sync_refused_when_not_configured(empty_settings: Settings) -> None:
+    app = create_app(enable_scheduler=False)
+    app.dependency_overrides[get_settings] = lambda: empty_settings
+    resp = TestClient(app).post("/api/shopify/sync")
+    assert resp.status_code == 409
+    assert "SHOPIFY_STORE_DOMAIN" in resp.json()["detail"]

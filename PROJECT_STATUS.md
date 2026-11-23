@@ -1,6 +1,6 @@
 # ATLAS — Project Status
 
-_Last updated: 2026-11-23 · Current phase: **1 complete (foundation)** → next: Phase 2 (Shopify sync)_
+_Last updated: 2026-11-23 · Current phase: **2 complete (Shopify sync, live run pending credentials)** → next: Phase 3 (Shopify analytics)_
 
 ## Environment findings (inspection)
 
@@ -9,6 +9,10 @@ _Last updated: 2026-11-23 · Current phase: **1 complete (foundation)** → next
 - **Shopify store** (verified via Claude's Shopify connection, not yet via ATLAS):
   *My Store 2*, USD, America/Chicago, **trial plan**, 1 location, **0 products, 0 orders**.
   All analytics will show empty states until the store has real catalog and sales data.
+- ATLAS's Shopify app: **"app named from claude"**, installed on the store with
+  `read_products`, `read_inventory`, `read_orders`, `read_locations`, `read_reports`,
+  `read_product_feeds` (verified via the store's app installations). "Atlas Dashboard"
+  (which had `read_customers`) was uninstalled by the owner.
 - `shopify store auth` cannot complete in the cloud dev container (its OAuth callback is
   `127.0.0.1` inside the container). Not required: ATLAS uses its own app credentials.
 
@@ -27,22 +31,33 @@ _Last updated: 2026-11-23 · Current phase: **1 complete (foundation)** → next
 | Provider adapters: Massive, FMP, SEC EDGAR (config + connectivity check), Claude API, eBay stub (planned, no network) | status endpoint test |
 | Frontend: dark terminal UI, 12-section side nav, top status bar, Overview, Settings (live check), placeholders for later-phase modules | `pnpm lint`, `pnpm build`, Playwright screenshots, 0 console errors |
 
-Totals: **26 backend tests passing**, ruff clean, ESLint clean, production build OK.
+| **Phase 2** — Shopify tables: products, variants, locations, inventory levels, orders, order lines, refunds, refund lines (no customer data); migration `8ae20e3d07a2` | migration up/down/up verified |
+| Sync queries validated against the live store schema (6/6 accepted) | run via Claude's Shopify connection |
+| Sync service: cost-bounded pagination, upserts, reconciliation of deleted items, incremental orders with watermark + 10-min overlap, follow-up fetch for >40 line items and refund lines, per-page commits, advisory lock, `core.sync_runs` audit with redacted errors | 11 DB integration tests (fixture data, isolated `atlas_test` DB) |
+| Strict normalizer: malformed Shopify data fails the run instead of storing guesses; missing unit cost stays NULL | tests |
+| Background scheduler (default hourly) with retries at 2/10/30 min; disabled until Shopify is configured | 3 tests |
+| API: `POST /api/shopify/sync`, `GET /api/shopify/sync/runs`, `GET /api/shopify/data-summary` | tests + live `curl` |
+| Settings → "Shopify data in ATLAS" panel with read-only Sync now | Playwright click-through, 0 console errors |
+
+Totals: **41 backend tests passing**, ruff clean, ESLint clean, production build OK.
 
 ## Incomplete / not started
 
-- Phase 2: Shopify sync (products, variants, inventory, orders, refunds), pagination, normalized tables.
+- Phase 2 live run: the sync has never run against the real store through ATLAS (needs credentials in `backend/.env`).
 - Phase 3: executive dashboard, product analytics, profitability, inventory monitoring, date comparisons.
 - Phase 4: AI analyst, opportunity score, daily/weekly reports, export.
 - Phase 5: market data fetching, indicators, research reports, scanner, watchlists, paper portfolio.
 - Phase 6: unified dashboard, eBay module build-out, cross-platform identity.
 - Phase 7: full audit.
-- Scheduled jobs (background sync with retry) — planned with Phase 2.
 - App-level user authentication — ATLAS currently assumes a single local user; required before any deployment beyond localhost.
 
 ## Current bugs / limitations
 
-- No known bugs. (A DB health-check bug — querying `alembic_version` outside the `core` schema — was found in live testing and fixed, with a test.)
+- No known bugs. Fixed during testing: DB health check queried `alembic_version` outside the
+  `core` schema; Phase 1 migration downgrade left enum types behind (blocked re-apply).
+- Orders older than 60 days are unavailable without the protected `read_all_orders` scope.
+- Order line-item quantities are as placed; refunded quantities live in `refund_lines` and
+  are subtracted in Phase 3 analytics (not yet implemented).
 - Live Shopify connectivity through ATLAS is **unverified** until app credentials exist.
 
 ## Required credentials (none are present yet)
@@ -56,11 +71,12 @@ Totals: **26 backend tests passing**, ruff clean, ESLint clean, production build
 
 ## Missing permissions
 
-- ATLAS's own Shopify app does not exist yet. Required scopes: `read_products`, `read_inventory`,
-  `read_orders`, `read_locations`; optional `read_reports`, `read_all_orders`.
+- None blocking. Optional: `read_all_orders` (protected; requires a request to Shopify) for
+  order history beyond 60 days. `read_product_feeds` on the app is unused and could be removed.
 
 ## Next steps
 
-1. Owner: create a Dev Dashboard app with the scopes above and install it on the store.
-2. Phase 2: sync jobs + normalized `shopify.*` tables, pagination and rate-limit validation.
-3. Phase 3: analytics on synced data, with fixtures (clearly labeled) for tests since the store has no orders.
+1. Owner: run ATLAS locally with the app's client ID/secret in `backend/.env`, then Settings →
+   live check → Sync now. Confirms end-to-end access.
+2. Phase 3: executive dashboard, product analytics, profitability (cost inputs UI), inventory
+   coverage, period comparisons — tested on labeled fixtures since the store has no orders.

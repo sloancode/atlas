@@ -1,5 +1,6 @@
 import { getSystemStatus, type ProviderStatus } from "@/lib/api";
 import { Code, EmptyState, PageHeader, Panel, StateBadge } from "@/components/ui";
+import { ShopifyDataPanel } from "@/components/ShopifyDataPanel";
 
 const CATEGORY_LABEL: Record<ProviderStatus["category"], string> = {
   commerce: "Commerce",
@@ -21,9 +22,10 @@ function ScopeList({ label, items, tone }: { label: string; items: unknown; tone
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ live?: string }>;
+  searchParams: Promise<{ live?: string; sync?: string }>;
 }) {
-  const live = (await searchParams).live === "1";
+  const params = await searchParams;
+  const live = params.live === "1";
   const res = await getSystemStatus(live);
 
   return (
@@ -100,6 +102,8 @@ export default async function SettingsPage({
             </table>
           </Panel>
 
+          <ShopifyDataPanel message={params.sync} />
+
           <div className="grid gap-4 lg:grid-cols-2">
             <Panel title="Connect Shopify (read-only)">
               <ol className="list-decimal space-y-1.5 pl-4 text-dim">
@@ -112,7 +116,7 @@ export default async function SettingsPage({
                   <Code>read_inventory</Code> <Code>read_orders</Code> <Code>read_locations</Code>{" "}
                   and optionally <Code>read_reports</Code> <Code>read_all_orders</Code>.
                 </li>
-                <li>Release the version and install the app on your store.</li>
+                <li>Release the version and install the app on your store (done: “app named from claude”).</li>
                 <li>
                   Put <Code>SHOPIFY_STORE_DOMAIN</Code>, <Code>SHOPIFY_CLIENT_ID</Code> and{" "}
                   <Code>SHOPIFY_CLIENT_SECRET</Code> in <Code>backend/.env</Code>, restart the API,
