@@ -118,3 +118,17 @@ it returns is typed fact / estimate / interpretation and cites fact IDs. ATLAS t
 checks, in code: cited IDs must exist; facts and estimates must cite something; every
 number in a **fact** must match a cited value (rounding allowed; dates and window
 lengths like "30 days" ignored). Failures are shown as **⚠ unverified** with the reason.
+
+## Market research
+
+Technical definitions are in `backend/app/services/market/indicators.py` (SMA, EMA seeded with the first
+close, Wilder RSI/ATR, MACD 12/26/9, volatility = stdev of daily log returns × √252, returns over
+21/63/126/252 sessions, relative strength = symbol return − SPY return in percentage points). Trend needs
+~220 sessions. Support/resistance are **estimates** from clustered swing highs/lows over 120 sessions.
+
+Fundamentals formulas are in `backend/app/services/market/fundamentals.py`. P/E is blank when EPS ≤ 0.
+Market cap comes from the provider; otherwise price × diluted shares, labeled as an estimate.
+
+Paper portfolio (SIMULATED): fills at the latest end-of-day close (source and price date recorded),
+average-cost basis, long only. Equity = virtual cash + positions at the latest close; unknown prices make
+equity unknown rather than zero.

@@ -68,3 +68,10 @@ body {
   --viz-neg: #e66767;
   --viz-grid: #1e2632;
 }
+
+/* Multi-series line chart (validated: dark surface, CVD and contrast PASS). */
+:root {
+  --viz-1: #3987e5;
+  --viz-2: #d95926;
+  --viz-3: #199e70;
+}

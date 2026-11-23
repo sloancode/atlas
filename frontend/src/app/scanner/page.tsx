@@ -1,12 +1,17 @@
-import { ModulePlaceholder } from "@/components/ModulePlaceholder";
+import { getPresets, getWatchlists } from "@/lib/api";
+import { ScannerPanel } from "@/components/ScannerPanel";
+import { EmptyState, PageHeader } from "@/components/ui";
 
-export default function ScannerPage() {
+export default async function ScannerPage() {
+  const [presets, lists] = await Promise.all([getPresets(), getWatchlists()]);
   return (
-    <ModulePlaceholder
-      href="/scanner"
-      subtitle={"Configurable screens that explain why each result appeared. Scores are not probabilities."}
-      capabilities={["Long-term, swing, momentum, value, growth, recovery, ETF categories", "User-defined criteria", "Per-result explanation of matched rules", "Data freshness on every row"]}
-      requires={["MASSIVE_API_KEY and/or FMP_API_KEY"]}
-    />
+    <>
+      <PageHeader code="SCN" title="Market Scanner"
+        subtitle="Rule-based screens over symbols you choose. Each result lists every rule with its actual value. Missing data never counts as a match, and there are no scores or probabilities." />
+      {!presets.ok ? <EmptyState title="Scanner unavailable">{presets.error}</EmptyState> : (
+        <ScannerPanel presets={presets.data.presets} metrics={presets.data.metrics}
+          watchlists={lists.ok ? lists.data.map((w) => ({ id: w.id, name: w.name, count: w.items.length })) : []} />
+      )}
+    </>
   );
 }

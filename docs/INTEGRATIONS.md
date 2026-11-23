@@ -49,19 +49,31 @@ in your own Shopify organization.
 | Cost | one request per question, or per report narrative you request (a few cents each). Automatic report narratives are off (`AI_REPORT_NARRATIVES=false`); set it to `true` to turn them on |
 | Without a key | reports and analytics work; the analyst and AI narratives show "not configured" |
 
-## Massive (market data) — Phase 5
+## Market data routing
 
-`MASSIVE_API_KEY`, base `https://api.massive.com`. Bearer auth. Connectivity check:
-`/v1/marketstatus/now`. Data tier (real-time vs delayed) determines the `delayed` label.
+prices: Massive → FMP · profile: Massive → FMP → SEC EDGAR · financials: FMP → SEC EDGAR · earnings: FMP · news: Massive → FMP.
+Results are cached in `market.cache` (prices 6 h, financials 1 day, news 1 h) with source and retrieval time;
+if every provider fails, stale cache is shown with a warning, otherwise the data is marked missing.
 
-## Financial Modeling Prep — Phase 5
+## Massive (market data)
 
-`FMP_API_KEY`, base `https://financialmodelingprep.com/stable`. Connectivity check: `/quote?symbol=SPY`.
+`MASSIVE_API_KEY`, base `https://api.massive.com`, Bearer auth. Endpoints (mapped from Massive's docs):
+`/v2/aggs/ticker/{t}/range/1/day/{from}/{to}` (adjusted daily bars, follows `next_url`),
+`/v3/reference/tickers/{t}` (overview), `/v2/reference/news`. ATLAS uses end-of-day closes only.
 
-## SEC EDGAR — Phase 5
+## Financial Modeling Prep
+
+`FMP_API_KEY`, base `https://financialmodelingprep.com/stable`: `historical-price-eod/full`, `profile`,
+`income-statement`, `balance-sheet-statement`, `cash-flow-statement` (annual), `earnings`, `news/stock`.
+**Field mappings not yet checked against a live response** (docs were unreachable from the build
+environment). Unknown or renamed fields become "unavailable", never guessed; please report mismatches.
+
+## SEC EDGAR
 
 Free; requires `SEC_USER_AGENT` (descriptive name + contact email, per SEC fair-access policy).
-Base `https://data.sec.gov`. Respect the 10 requests/second limit.
+Ticker → CIK via `www.sec.gov/files/company_tickers.json`; annual financials from
+`data.sec.gov/api/xbrl/companyfacts/CIK##########.json` (10-K, full fiscal-year durations, latest
+filing/amendment wins). US-listed SEC filers only.
 
 ## eBay Sell APIs — planned, disabled
 

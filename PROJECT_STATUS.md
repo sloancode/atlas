@@ -1,6 +1,6 @@
 # ATLAS — Project Status
 
-_Last updated: 2026-11-23 · Current phase: **4 complete — AI business intelligence** → next: Phase 5 (market research engine)_
+_Last updated: 2026-11-23 · Current phase: **5 complete — market research engine** → next: Phase 6 (unified platform, eBay module prep)_
 
 ## Environment findings (inspection)
 
@@ -54,7 +54,15 @@ _Last updated: 2026-11-23 · Current phase: **4 complete — AI business intelli
 | AI analyst (Claude API, `claude-opus-5-5`): data pack with fact IDs, structured typed answers with citations, verification in code, refusal fallback off (owner's choice), clear errors, graceful no-key state | 16 tests (fake client) + end-to-end through the real SDK against a local mock API + browser |
 | Optional AI interpretation on reports, on request only (automatic narratives off by owner's choice; labeled, verified; failure leaves the report intact) | tests + browser |
 
-Totals: **112 backend tests passing**, ruff clean, ESLint clean, production build OK.
+| **Phase 5** — Indicators: SMA/EMA, Wilder RSI, MACD, ATR, volatility, returns, relative strength vs SPY, 52-week range, support/resistance (estimates), trend | 9 tests incl. exact RSI on StockCharts' example data (ATLAS 70.46 vs published 70.53: the sheet rounds intermediate averages) |
+| Market data: Massive (checked against its docs), SEC EDGAR companyfacts, FMP stable API (**not yet checked against a live response**; defensive parsing); routing with fallbacks, DB cache with TTL, provenance on every result, MISSING when unconfigured | 10 tests (mocked HTTP in documented shapes) |
+| Fundamentals: growth, margins, FCF, cash, debt, net debt, D/E, market cap (provider or labeled estimate), P/E, P/S, P/FCF, FCF yield | hand-computed tests |
+| Research page: price chart (close + SMA50/200, validated palette, legend, crosshair), technicals, returns vs SPY, fundamentals, earnings, news, events, per-source data status | browser (test-fixture cache) |
+| AI research note (12 required sections) with the same fact verification; competitors/news only from retrieved data | test with fake client |
+| Scanner: 7 presets + custom rules, every rule shown with its actual value, missing data never matches, no scores | tests + browser |
+| Watchlists with latest close/change; SIMULATED paper portfolio (fills at recorded end-of-day close with source and price date, average cost, no shorting, realized/unrealized P&L, equity curve, journal) | 6 tests (hand-computed ledger) + browser |
+
+Totals: **137 backend tests passing**, ruff clean, ESLint clean, production build OK.
 
 ## Incomplete / not started
 
@@ -75,6 +83,11 @@ Totals: **112 backend tests passing**, ruff clean, ESLint clean, production buil
 - The AI analyst has **not been run against the real Claude API** yet (no key); it was verified with
   a fake client and a local mock of the Messages API through the real SDK.
 - Estimates and interpretations from the AI are labeled but not number-checked (only facts are).
+- **No market data provider has been called live from ATLAS** (no keys; the build environment's network
+  blocks the providers). Massive mappings follow its docs; FMP mappings are unverified; SEC EDGAR follows
+  its public formats. Browser checks used clearly labeled TEST-FIXTURE data in a separate demo database.
+- Prices are end-of-day closes (not real-time); paper fills use the latest close.
+- Scanner universe is user-supplied (≤ 40 symbols per run) to respect API limits; no full-market screener.
 - Returns are net of discounts, so "Returns" can differ slightly from Shopify's report, which adds
   discounts back; net sales is unaffected. See docs/METRICS.md.
 - Store has no products/orders yet, so live pages show honest empty states; populated views were
@@ -92,8 +105,8 @@ Totals: **112 backend tests passing**, ruff clean, ESLint clean, production buil
 |---|---|---|
 | `SHOPIFY_STORE_DOMAIN`, `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET` | Shopify engine | ✅ set on owner's machine |
 | `ANTHROPIC_API_KEY` | AI analyst & report narratives | Phase 4 (optional; not set) |
-| `MASSIVE_API_KEY` and/or `FMP_API_KEY` | Market data | Phase 5 |
-| `SEC_USER_AGENT` | SEC EDGAR | Phase 5 |
+| `MASSIVE_API_KEY` and/or `FMP_API_KEY` | Prices, profiles, news (Massive); financials, earnings (FMP) | Phase 5 (optional; not set) |
+| `SEC_USER_AGENT` | SEC EDGAR financials (free; your name + email) | Phase 5 (optional; not set) |
 
 ## Missing permissions
 
@@ -104,5 +117,6 @@ Totals: **112 backend tests passing**, ruff clean, ESLint clean, production buil
 
 1. Owner: `git pull` and restart (`./scripts/run.sh`). Optionally add `ANTHROPIC_API_KEY` to
    `backend/.env` to enable the analyst; then ask a question to confirm the live API works.
-2. Phase 5: market data adapters (Massive, FMP, SEC EDGAR), indicators, research reports,
-   scanner, watchlists, paper portfolio.
+2. Optional: add `SEC_USER_AGENT` (free) and/or `MASSIVE_API_KEY` / `FMP_API_KEY`, then research a
+   ticker to confirm live data (especially FMP field mappings).
+3. Phase 6: unified dashboard, eBay module preparation, cross-platform data model.

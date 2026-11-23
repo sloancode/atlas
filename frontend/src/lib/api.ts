@@ -380,3 +380,92 @@ export async function apiPostJson<T>(path: string, body: unknown): Promise<ApiRe
 }
 
 export const BACKEND_URL = BACKEND;
+
+// ------------------------------------------------------------ phase 5 types
+export type SourceStatus = { status: "historical" | "missing"; source: string | null; retrieved_at: string | null; cached: boolean; notes: string[] };
+
+export type Technicals = {
+  as_of: string | null; sessions: number; close: number | null; sma20: number | null; sma50: number | null;
+  sma200: number | null; ema20: number | null; rsi14: number | null; macd: number | null; macd_signal: number | null;
+  macd_hist: number | null; atr14: number | null; volatility_20d: number | null; volatility_60d: number | null;
+  returns: Record<string, number | null>; relative_strength: Record<string, number | null>;
+  high_52w: number | null; low_52w: number | null; pct_from_52w_high: number | null; avg_volume_20d: number | null;
+  support_resistance: { support: { level: number; touches: number }[]; resistance: { level: number; touches: number }[]; method: string };
+  trend: string; trend_reason: string;
+};
+
+export type FundamentalsData = {
+  fiscal_year: number | null; period_end: string | null; revenue: number | null; net_income: number | null;
+  revenue_growth_pct: number | null; earnings_growth_pct: number | null; eps_growth_pct: number | null;
+  gross_margin_pct: number | null; operating_margin_pct: number | null; free_cash_flow: number | null;
+  fcf_margin_pct: number | null; cash: number | null; total_debt: number | null; net_debt: number | null;
+  debt_to_equity: number | null; market_cap: number | null; market_cap_source: string | null;
+  pe: number | null; ps: number | null; p_fcf: number | null; fcf_yield_pct: number | null;
+  history: { fiscal_year: number | null; period_end: string; revenue: number | null; net_income: number | null; eps_diluted: number | null; free_cash_flow: number | null }[];
+  notes: string[];
+};
+
+export type Snapshot = {
+  symbol: string; generated_at: string; is_etf: boolean;
+  price: { close: number | null; as_of: string | null; note: string };
+  profile: Record<string, string | number | boolean | null>;
+  technicals: Technicals;
+  fundamentals: FundamentalsData | null;
+  earnings: { upcoming: { date: string; eps_estimate: number | null }[]; recent: { date: string; eps_actual: number | null; eps_estimate: number | null }[] };
+  news: { published: string | null; title: string; publisher: string | null; url: string | null; summary: string | null }[];
+  events_to_monitor: string[];
+  chart: { dates: string[]; close: (number | null)[]; sma50: (number | null)[]; sma200: (number | null)[] };
+  data_status: Record<string, SourceStatus>;
+  disclaimer: string;
+};
+
+export type ResearchAI = {
+  summary: string; sections: Record<string, VerifiedItem[]>; insufficient_data: boolean;
+  verification: { verified: number; unverified: number }; model: string | null; generated_at: string; price_as_of: string | null;
+};
+
+export type ScanResult = {
+  symbol: string; name: string | null; matched: boolean; passed: number; total: number;
+  checks: { label: string; passed: boolean; actual: unknown; detail: string }[];
+  close: number | null; price_as_of: string | null; missing_data: string[];
+};
+
+export type WatchItem = { id: number; symbol: string; note: string | null; close?: number | null; as_of?: string | null; change_pct?: number | null; source?: string | null; status?: string; notes?: string[] };
+export type WatchlistT = { id: number; name: string; items: WatchItem[] };
+
+export type PaperState = {
+  label: string;
+  account: { id: number; name: string; starting_cash: number; created_at: string };
+  simulated: true; cash: number; market_value: number; equity: number | null; total_return_pct: number | null;
+  realized_pl: number; missing_prices: string[];
+  positions: { symbol: string; quantity: number; avg_cost: number; cost_basis: number; price: number | null; price_as_of: string | null; market_value: number | null; unrealized_pl: number | null; unrealized_pl_pct: number | null }[];
+  equity_curve: { date: string; equity: number }[];
+  trades: { id: number; symbol: string; side: "buy" | "sell"; quantity: number; price: number; price_source: string; executed_at: string; thesis: string | null; lesson: string | null }[];
+};
+
+export const getSnapshot = (symbol: string) => apiGet<Snapshot>(`/api/markets/research/${encodeURIComponent(symbol)}`);
+export const getResearchReports = (symbol: string) =>
+  apiGet<{ id: number; generated_at: string; report: ResearchAI }[]>(`/api/markets/research/${encodeURIComponent(symbol)}/reports`);
+export const getPresets = () =>
+  apiGet<{ presets: Record<string, { label: string; description: string; rules: { metric: string; op: string; value: unknown }[] }>; metrics: Record<string, string> }>("/api/markets/scanner/presets");
+export const getWatchlists = (withPrices = false) => apiGet<WatchlistT[]>(`/api/markets/watchlists${withPrices ? "?with_prices=true" : ""}`);
+export const getPaper = () => apiGet<PaperState>("/api/markets/paper");
+
+export async function apiSend<T>(method: "POST" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<ApiResult<T>> {
+  const fetchedAt = new Date().toISOString();
+  try {
+    const res = await fetch(`${BACKEND}${path}`, {
+      method, cache: "no-store",
+      headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      const d = data?.detail;
+      return { ok: false, error: typeof d === "string" ? d : Array.isArray(d) ? d.map((x: { msg: string }) => x.msg).join("; ") : `HTTP ${res.status}`, fetchedAt };
+    }
+    return { ok: true, data: data as T, fetchedAt };
+  } catch {
+    return { ok: false, error: "ATLAS backend is unreachable", fetchedAt };
+  }
+}

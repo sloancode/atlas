@@ -98,7 +98,8 @@ def place_trade(
         held = led["positions"].get(symbol, {}).get("quantity", Decimal(0))
         if quantity > held:
             raise PaperError(
-                f"Cannot sell {quantity} {symbol}: only {held} held (no short selling)."
+                f"Cannot sell {quantity.normalize():f} {symbol}: only {held.normalize():f} held "
+                "(no short selling)."
             )
     t = PaperTrade(
         account_id=acct.id,

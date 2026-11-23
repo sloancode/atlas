@@ -82,6 +82,22 @@ async def build_snapshot(md: MarketData, symbol: str) -> dict[str, Any]:
         monitor.append(f"Trading within 3% of its 52-week high ({tech.high_52w}).")
 
     last_bar = blist[-1].date.isoformat() if blist else None
+    chart: dict[str, list] = {"dates": [], "close": [], "sma50": [], "sma200": []}
+    if blist:
+        df = indicators.to_frame(blist)
+        c = df["close"]
+        s50, s200 = indicators.sma(c, 50), indicators.sma(c, 200)
+        tail = df.index[-252:]
+
+        def _r(v: float) -> float | None:
+            return None if v != v else round(float(v), 4)  # NaN -> None
+
+        chart = {
+            "dates": [d.isoformat() for d in tail],
+            "close": [_r(c[d]) for d in tail],
+            "sma50": [_r(s50[d]) for d in tail],
+            "sma200": [_r(s200[d]) for d in tail],
+        }
     return {
         "symbol": symbol,
         "generated_at": datetime.now(UTC).isoformat(),
@@ -100,6 +116,7 @@ async def build_snapshot(md: MarketData, symbol: str) -> dict[str, Any]:
         },
         "news": (news.data or [])[:8],
         "events_to_monitor": monitor,
+        "chart": chart,
         "data_status": {
             "profile": _status(profile),
             "prices": _status(bars),
