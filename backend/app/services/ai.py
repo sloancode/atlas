@@ -227,7 +227,11 @@ async def call_claude(
     pack_text: str,
     question: str,
     client: anthropic.AsyncAnthropic | None = None,
-) -> tuple[ModelAnswer, dict[str, Any]]:
+    *,
+    system: str | None = None,
+    schema: dict[str, Any] | None = None,
+    model_cls: type[BaseModel] | None = None,
+) -> tuple[Any, dict[str, Any]]:
     """Send the pack + question; return the parsed answer and call metadata."""
     client = client or _claude_client(settings)
     try:
@@ -239,10 +243,14 @@ async def call_claude(
             thinking={"type": "adaptive"},
             output_config={
                 "effort": "high",
-                "format": {"type": "json_schema", "schema": OUTPUT_SCHEMA},
+                "format": {"type": "json_schema", "schema": schema or OUTPUT_SCHEMA},
             },
             system=[
-                {"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}
+                {
+                    "type": "text",
+                    "text": system or SYSTEM_PROMPT,
+                    "cache_control": {"type": "ephemeral"},
+                }
             ],
             messages=[
                 {
@@ -277,7 +285,7 @@ async def call_claude(
     if not text:
         raise AIError("Claude returned no answer text.")
     try:
-        answer = ModelAnswer.model_validate(json.loads(text))
+        answer = (model_cls or ModelAnswer).model_validate(json.loads(text))
     except (json.JSONDecodeError, ValidationError):
         raise AIError("Claude's answer was not in the expected format.") from None
     meta = {
@@ -351,7 +359,7 @@ class AnalystAnswer(BaseModel):
     )
 
 
-def verify(answer: ModelAnswer, facts: dict[str, Any]) -> list[VerifiedItem]:
+def verify(answer: Any, facts: dict[str, Any]) -> list[VerifiedItem]:
     results = []
     for item in answer.items:
         issues: list[str] = []

@@ -396,6 +396,9 @@ class PaperTrade(Base):
     quantity: Mapped[Decimal] = mapped_column(Numeric(18, 6))
     price: Mapped[Decimal] = mapped_column(Numeric(16, 4))
     price_source: Mapped[str] = mapped_column(String(80))  # e.g. "massive close 2026-11-20"
+    price_date: Mapped[date | None] = mapped_column(
+        Date
+    )  # session whose close was used for the fill
     executed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

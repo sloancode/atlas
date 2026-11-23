@@ -45,3 +45,5 @@ ignore = ["S101", "B008", "UP046"]  # FastAPI Depends pattern; pydantic Generic 
 # Analytics SQL interpolates only module constants and allow-listed column names;
 # every user-supplied value is a bound parameter.
 "app/services/analytics/*" = ["S608"]
+# Long prose lines in the research prompt.
+"app/services/market/research.py" = ["E501"]
