@@ -28,3 +28,4 @@ next-env.d.ts
 
 # Local data exports
 exports/
+backend/data/

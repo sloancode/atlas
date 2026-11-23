@@ -9,6 +9,7 @@ dependencies = [
     "anthropic>=2.12.0",
     "apscheduler>=3.11.3",
     "fastapi>=0.165.0",
+    "fpdf2>=2.9.0",
     "httpx>=0.28.1",
     "pandas>=3.1.1",
     "psycopg[binary]>=3.3.9",
@@ -47,3 +48,5 @@ ignore = ["S101", "B008", "UP046"]  # FastAPI Depends pattern; pydantic Generic 
 "app/services/analytics/*" = ["S608"]
 # Long prose lines in the research prompt.
 "app/services/market/research.py" = ["E501"]
+# Prose in the Autopilot system prompt and tool descriptions.
+"app/services/autopilot/agent.py" = ["E501"]

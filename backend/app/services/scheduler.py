@@ -48,8 +48,44 @@ class SyncScheduler:
             coalesce=True,
             next_run_time=datetime.now(UTC) + timedelta(seconds=30),
         )
+        self.scheduler.add_job(
+            self._autopilot,
+            "interval",
+            hours=1,
+            id="autopilot",
+            max_instances=1,
+            coalesce=True,
+            next_run_time=datetime.now(UTC) + timedelta(minutes=5),
+        )
         self.scheduler.start()
         log.info("Shopify sync scheduled every %s minutes", minutes)
+
+    async def _autopilot(self) -> None:
+        """Hourly check: run the Autopilot agent when enabled and its interval has elapsed."""
+        from sqlalchemy import select
+
+        from app.api.routes.autopilot import execute_run
+        from app.db.models import AgentRun
+        from app.services.autopilot.guardrails import get_config
+
+        try:
+            with sessionmaker(bind=get_engine(), expire_on_commit=False)() as s:
+                cfg = get_config(s)
+                if not cfg.active or not self.settings.anthropic_api_key:
+                    return
+                last = s.scalars(
+                    select(AgentRun)
+                    .where(AgentRun.trigger == "schedule")
+                    .order_by(AgentRun.id.desc())
+                ).first()
+                if last and datetime.now(UTC) - last.started_at < timedelta(
+                    hours=cfg.run_every_hours
+                ):
+                    return
+                run = await execute_run(s, self.settings, "schedule")
+                log.info("Autopilot run %s finished: %s", run.id, run.status)
+        except Exception as exc:  # the agent must never break syncing
+            log.warning("Autopilot run failed: %s", type(exc).__name__)
 
     def shutdown(self) -> None:
         if self.scheduler.running:
