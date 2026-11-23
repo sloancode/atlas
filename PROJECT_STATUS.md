@@ -1,6 +1,6 @@
 # ATLAS — Project Status
 
-_Last updated: 2026-11-23 · Current phase: **Shopify Autopilot complete** (owner re-prioritised: Shopify first, eBay later) → next: owner setup + first live Autopilot run_
+_Last updated: 2026-11-23 · Current phase: **Autonomous paper trading bot** (Shopify Autopilot complete; Etsy dropped by owner; eBay deferred)_
 
 ## Environment findings (inspection)
 
@@ -68,7 +68,9 @@ _Last updated: 2026-11-23 · Current phase: **Shopify Autopilot complete** (owne
 | Autopilot agent (Claude tool loop, `claude-opus-5-5`, no fallback): stop switch re-checked each step, step limit, daily AI budget, PDF product generation | 6 tests (scripted Claude, fake Shopify); found+fixed multi-bullet PDF bug |
 | Autopilot page: status, STOP/Resume, Run now, limits, Needs-you file queue with PDF download + confirmation, action log, runs; top bar shows Autopilot mode | browser (TEST data in demo DB) |
 
-Totals: **156 backend tests passing**, ruff clean, ESLint clean, production build OK.
+| **Paper trading bot** — trend-following swing rules + moderate risk limits in code; paper-only guard; plan CLI reading Alpaca responses; hourly scheduled run (docs/TRADING_BOT.md) | 10 tests; dry run on live Alpaca paper data 2026-11-23 (SPY 724.95 < SMA200 730.48, cross-checked: no buys) |
+
+Totals: **166 backend tests passing**, ruff clean, ESLint clean, production build OK.
 
 ## Incomplete / not started
 
@@ -110,6 +112,8 @@ Totals: **156 backend tests passing**, ruff clean, ESLint clean, production buil
 - Setup script tested on Ubuntu 24.04, not Debian 12 (ChromeOS's Linux): Debian mirrors and the
   NodeSource/uv installer hosts are blocked in the cloud test environment, so those two
   downloads were pre-provided in the test. Same apt/PostgreSQL code paths otherwise.
+
+- Trading bot rules are unit-tested, **not backtested**; judge them on the paper account.
 
 ## Required credentials
 

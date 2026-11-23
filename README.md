@@ -5,6 +5,7 @@ Personal business intelligence and market research platform.
 - **Shopify engine**: sales, product, profitability and inventory analytics for your store (read-only).
 - **Market research engine**: US stock/ETF research, scanner and a *simulated* paper portfolio.
 - **Shopify Autopilot**: optional AI agent that creates, prices and publishes digital products within your limits.
+- **Paper trading bot**: autonomous trend-following bot for an Alpaca *paper* account (see [docs/TRADING_BOT.md](docs/TRADING_BOT.md)).
 - **eBay module**: architecture prepared; intentionally not connected.
 
 ATLAS reads your store without changing it, **unless you enable Shopify Autopilot**: an AI agent
