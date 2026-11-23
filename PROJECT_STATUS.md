@@ -30,7 +30,6 @@ _Last updated: 2026-11-23 · Current phase: **2 complete (Shopify sync, live run
 | Shopify scope verification (missing required/optional, unneeded write scopes) | mocked tests |
 | Provider adapters: Massive, FMP, SEC EDGAR (config + connectivity check), Claude API, eBay stub (planned, no network) | status endpoint test |
 | Frontend: dark terminal UI, 12-section side nav, top status bar, Overview, Settings (live check), placeholders for later-phase modules | `pnpm lint`, `pnpm build`, Playwright screenshots, 0 console errors |
-
 | **Phase 2** — Shopify tables: products, variants, locations, inventory levels, orders, order lines, refunds, refund lines (no customer data); migration `8ae20e3d07a2` | migration up/down/up verified |
 | Sync queries validated against the live store schema (6/6 accepted) | run via Claude's Shopify connection |
 | Sync service: cost-bounded pagination, upserts, reconciliation of deleted items, incremental orders with watermark + 10-min overlap, follow-up fetch for >40 line items and refund lines, per-page commits, advisory lock, `core.sync_runs` audit with redacted errors | 11 DB integration tests (fixture data, isolated `atlas_test` DB) |
