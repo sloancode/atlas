@@ -36,3 +36,11 @@ export function formatKpi(kind: string, v: number | null, currency: string | nul
   if (kind === "percent") return pct(v);
   return num(v);
 }
+
+/** Date-time in US Eastern, labeled: the bot's schedule and the market clock are in ET. */
+export function fmtET(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return `${new Date(iso).toLocaleString("en-US", {
+    month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York",
+  })} ET`;
+}

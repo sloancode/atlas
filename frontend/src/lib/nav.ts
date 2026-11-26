@@ -28,6 +28,9 @@ export const NAV: NavGroup[] = [
       { href: "/scanner", label: "Market Scanner", code: "SCN", phase: 5 },
       { href: "/watchlists", label: "Watchlists", code: "WCH", phase: 5 },
       { href: "/portfolio", label: "Paper Portfolio", code: "PPF", phase: 5 },
+      { href: "/bot", label: "Bot Run Log", code: "BOT", phase: 7 },
+      { href: "/bot/rules", label: "Bot Rules", code: "BRL", phase: 7 },
+      { href: "/bot/settings", label: "Bot Settings", code: "BST", phase: 7 },
     ],
   },
   {

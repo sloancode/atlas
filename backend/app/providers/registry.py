@@ -1,6 +1,7 @@
 import httpx
 
 from app.core.config import Settings
+from app.providers.alpaca import AlpacaPaperProvider
 from app.providers.base import ConnectionState, Provider, ProviderCategory, ProviderStatus
 from app.providers.ebay.provider import EbayProvider
 from app.providers.market.adapters import EdgarProvider, FMPProvider, MassiveProvider
@@ -49,6 +50,7 @@ def build_providers(settings: Settings) -> list[Provider]:
         MassiveProvider(settings),
         FMPProvider(settings),
         EdgarProvider(settings),
+        AlpacaPaperProvider(settings),
         EbayProvider(settings),
     ]
 

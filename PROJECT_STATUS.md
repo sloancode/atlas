@@ -70,7 +70,9 @@ _Last updated: 2026-11-23 · Current phase: **Autonomous paper trading bot** (Sh
 
 | **Paper trading bot** — trend-following swing rules + moderate risk limits in code; paper-only guard; plan CLI reading Alpaca responses; hourly scheduled run (docs/TRADING_BOT.md) | 10 tests; dry run on live Alpaca paper data 2026-11-23 (SPY 724.95 < SMA200 730.48, cross-checked: no buys) |
 
-Totals: **166 backend tests passing**, ruff clean, ESLint clean, production build OK.
+| **Bot dashboard** — Run log, Rules and Settings pages; `/api/bot/runs`, `/rules`, `/settings`; read-only Alpaca paper client (GET only, paper URL fixed, non-paper accounts refused) | 10 tests (mocked Alpaca HTTP); browser check of populated (TEST data) and not-configured states, 0 console errors |
+
+Totals: **176 backend tests passing**, ruff clean, ESLint clean, production build OK.
 
 ## Incomplete / not started
 
@@ -122,6 +124,7 @@ Totals: **166 backend tests passing**, ruff clean, ESLint clean, production buil
 | `SHOPIFY_STORE_DOMAIN`, `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET` | Shopify engine | ✅ set on owner's machine |
 | `ANTHROPIC_API_KEY` | AI analyst, report narratives, **Autopilot** | required for Autopilot (not set) |
 | `MASSIVE_API_KEY` and/or `FMP_API_KEY` | Prices, profiles, news (Massive); financials, earnings (FMP) | Phase 5 (optional; not set) |
+| `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY` | Bot dashboard: paper account, orders, positions (paper keys only) | optional; not set |
 | `SEC_USER_AGENT` | SEC EDGAR financials (free; your name + email) | Phase 5 (optional; not set) |
 
 ## Missing permissions

@@ -18,6 +18,7 @@ class ProviderCategory(StrEnum):
     MARKET_DATA = "market_data"  # Massive, FMP
     FILINGS = "filings"  # SEC EDGAR
     AI = "ai"  # Claude API
+    BROKER = "broker"  # Alpaca PAPER account (read-only)
 
 
 class ConnectionState(StrEnum):

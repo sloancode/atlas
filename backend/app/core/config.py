@@ -66,6 +66,12 @@ class Settings(BaseSettings):
     # SEC requires a descriptive User-Agent with contact info for EDGAR access.
     sec_user_agent: str | None = None
 
+    # --- Alpaca (PAPER trading only; read-only from ATLAS) -------------------
+    # Paper keys from https://app.alpaca.markets/paper/dashboard/overview. The base URL is fixed
+    # to the paper endpoint in code; there is deliberately no setting for a live URL.
+    alpaca_api_key_id: str | None = None
+    alpaca_api_secret_key: SecretStr | None = None
+
     # --- eBay (future; not connected) ---------------------------------------
     ebay_enabled: bool = False
 

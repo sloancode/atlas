@@ -26,6 +26,21 @@ Every trading hour (9:41–15:41 ET, Mon–Fri) a scheduled Claude session:
 The broker is the source of truth: the planner keeps no state of its own. Every plan is also
 appended to `backend/data/trading/plans.jsonl` (git-ignored).
 
+## Dashboard pages
+
+ATLAS shows the bot under **Markets** in the side nav. All three pages are read-only.
+
+| Page | Shows | Data from |
+|---|---|---|
+| `/bot` Run log | every planner run (decisions, skipped symbols and why) and the latest 100 orders at Alpaca, marked "bot" when the `client_order_id` starts with `atlas-` | `GET /api/bot/runs`: `data/trading/plans.jsonl` + Alpaca `/v2/orders` |
+| `/bot/rules` Rules | the rules, generated from `config.py`, and how each universe symbol scored in the latest run | `GET /api/bot/rules` |
+| `/bot/settings` Settings | paper account balances, market clock, positions, open orders (stops), risk limits, schedule | `GET /api/bot/settings`: Alpaca `/v2/account`, `/v2/clock`, `/v2/positions`, `/v2/orders?status=open` |
+
+To show broker data, set `ALPACA_API_KEY_ID` and `ALPACA_API_SECRET_KEY` (paper keys) in
+`backend/.env`. The client (`app/providers/alpaca.py`) only sends GET requests, its base URL is
+fixed to `paper-api.alpaca.markets`, and it refuses any account whose number does not start with
+`PA`. Risk limits are not editable from the browser on purpose.
+
 ## Rules (trend-following swing)
 
 | | |

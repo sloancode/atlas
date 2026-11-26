@@ -8,6 +8,7 @@ const CATEGORY_LABEL: Record<ProviderStatus["category"], string> = {
   market_data: "Market data",
   filings: "Filings",
   ai: "AI",
+  broker: "Broker (paper)",
 };
 
 function ScopeList({ label, items, tone }: { label: string; items: unknown; tone: string }) {

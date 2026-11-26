@@ -74,7 +74,10 @@ def test_env_example_loads_as_shipped(tmp_path, monkeypatch) -> None:
             "SHOPIFY_STORE_DOMAIN=rcae4k-sp.myshopify.com",
         )
     )
-    for var in ("CORS_ORIGINS", "DATABASE_URL", "FMP_API_KEY", "MASSIVE_API_KEY"):
+    for var in (
+        "CORS_ORIGINS", "DATABASE_URL", "FMP_API_KEY", "MASSIVE_API_KEY",
+        "ALPACA_API_KEY_ID", "ALPACA_API_SECRET_KEY",
+    ):  # fmt: skip
         monkeypatch.delenv(var, raising=False)
     s = Settings(_env_file=env)
     assert s.cors_origins == ["http://localhost:3000"]
@@ -87,6 +90,7 @@ def test_env_example_loads_as_shipped(tmp_path, monkeypatch) -> None:
         "massive": "not_configured",
         "fmp": "not_configured",
         "sec_edgar": "not_configured",
+        "alpaca": "not_configured",
         "ebay": "planned",
     }
 

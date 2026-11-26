@@ -2,10 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { NAV } from "@/lib/nav";
+import { ALL_NAV, NAV } from "@/lib/nav";
 
 export function Sidebar() {
   const pathname = usePathname();
+  // Most specific match wins, so /bot/rules highlights "Bot Rules", not "Bot Run Log".
+  const activeHref = ALL_NAV.map((i) => i.href)
+    .filter((h) => (h === "/" ? pathname === "/" : pathname === h || pathname.startsWith(`${h}/`)))
+    .sort((a, b) => b.length - a.length)[0];
   return (
     <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-panel">
       <div className="flex h-11 items-center gap-2 border-b border-border px-4">
@@ -19,7 +23,7 @@ export function Sidebar() {
               {group.title}
             </div>
             {group.items.map((item) => {
-              const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+              const active = item.href === activeHref;
               return (
                 <Link
                   key={item.href}

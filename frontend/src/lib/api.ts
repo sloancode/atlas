@@ -11,7 +11,7 @@ export type ConnectionState =
 export type ProviderStatus = {
   name: string;
   display_name: string;
-  category: "commerce" | "market_data" | "filings" | "ai";
+  category: "commerce" | "market_data" | "filings" | "ai" | "broker";
   state: ConnectionState;
   message: string;
   required_env: string[];
@@ -490,3 +490,136 @@ export type TrafficT = { status: "historical" | "missing"; as_of: string | null;
 export const getAutopilot = () => apiGet<AutopilotOverview>("/api/autopilot");
 export const getTraffic = (p: PeriodParams) => apiGet<TrafficT>(`/api/analytics/traffic?${periodQuery(p)}`);
 export const getStoreSettings = () => apiGet<{ digital_only: boolean }>("/api/settings/store");
+
+// ------------------------------------------------------------ trading bot (Alpaca PAPER)
+export type BotAction = {
+  action: "buy" | "sell" | "stop" | "cancel";
+  symbol: string;
+  reason: string;
+  qty?: number;
+  stop_price?: number;
+  order_id?: string;
+  type?: string;
+  time_in_force?: string;
+  client_order_id?: string;
+};
+export type BotSkip = { symbol: string; reason: string };
+export type BotPlanSummary = {
+  now_et?: string;
+  equity?: number;
+  cash?: number;
+  positions?: number;
+  regime?: "on" | "off";
+  drawdown_pct?: number;
+  buys_paused?: boolean;
+  trend_exits_evaluated?: boolean;
+  candidates?: string[];
+  [key: string]: unknown;
+};
+export type BotRun = {
+  planned_at: string | null;
+  summary: BotPlanSummary;
+  actions: BotAction[];
+  skipped: BotSkip[];
+  counts: { buy: number; sell: number; stop: number; cancel: number };
+};
+export type BrokerOrder = {
+  id: string;
+  client_order_id: string;
+  by_bot: boolean;
+  symbol: string;
+  side: string;
+  type: string | null;
+  time_in_force: string | null;
+  qty: number | null;
+  filled_qty: number | null;
+  filled_avg_price: number | null;
+  stop_price: number | null;
+  limit_price: number | null;
+  status: string;
+  submitted_at: string | null;
+  filled_at: string | null;
+  canceled_at: string | null;
+};
+export type BotRuns = {
+  runs: BotRun[];
+  journal: { path: string; total: number; unreadable: number };
+  orders: BrokerOrder[];
+  broker: { configured: boolean; error: string | null };
+};
+export type BotRules = {
+  strategy: string;
+  benchmark: string;
+  universe: string[];
+  rules: { key: string; group: string; rule: string }[];
+  latest_evaluation: null | {
+    planned_at: string | null;
+    summary: BotPlanSummary;
+    symbols: { symbol: string; status: "buy" | "sell" | "signal" | "no" | "held"; reason: string }[];
+  };
+  source: string;
+};
+export type BrokerPosition = {
+  symbol: string;
+  qty: number | null;
+  avg_entry_price: number | null;
+  current_price: number | null;
+  market_value: number | null;
+  unrealized_pl: number | null;
+  unrealized_plpc: number | null;
+  side: string;
+};
+export type BotSettings = {
+  risk: {
+    max_position_pct: number;
+    max_positions: number;
+    stop_loss_pct: number;
+    drawdown_pause_pct: number;
+    max_new_buys_per_day: number;
+    cooldown_days: number;
+    allow_short: boolean;
+    allow_margin: boolean;
+    whole_shares_only: boolean;
+    options: boolean;
+    crypto: boolean;
+  };
+  signals: {
+    fast: number;
+    slow: number;
+    slope_lookback: number;
+    rs_window: number;
+    max_below_high_pct: number;
+    trend_exit_hour_et: number;
+    order_prefix: string;
+  };
+  schedule: { description: string; timezone: string; runs_et: string[]; skips_when_market_closed: boolean };
+  broker: {
+    endpoint: string;
+    paper_only: boolean;
+    configured: boolean;
+    missing_env: string[];
+    error: string | null;
+    account: null | {
+      account: string | null;
+      status: string | null;
+      currency: string | null;
+      equity: number | null;
+      last_equity: number | null;
+      cash: number | null;
+      buying_power: number | null;
+      long_market_value: number | null;
+      trading_blocked: boolean;
+      account_blocked: boolean;
+      balance_asof: string | null;
+    };
+    clock: null | { is_open: boolean; next_open: string; next_close: string; timestamp: string };
+    positions: BrokerPosition[];
+    open_orders: BrokerOrder[];
+  };
+  editable: boolean;
+  note: string;
+};
+
+export const getBotRuns = (limit = 30) => apiGet<BotRuns>(`/api/bot/runs?limit=${limit}`);
+export const getBotRules = () => apiGet<BotRules>("/api/bot/rules");
+export const getBotSettings = () => apiGet<BotSettings>("/api/bot/settings");
