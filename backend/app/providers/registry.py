@@ -1,17 +1,16 @@
 import httpx
 
 from app.core.config import Settings
+from app.providers.alpaca import AlpacaProvider
 from app.providers.base import ConnectionState, Provider, ProviderCategory, ProviderStatus
-from app.providers.ebay.provider import EbayProvider
 from app.providers.market.adapters import EdgarProvider, FMPProvider, MassiveProvider
-from app.providers.shopify.provider import ShopifyProvider
 
 
 class ClaudeProvider(Provider):
-    """Claude API for ATLAS's AI analyst (separate from Claude Code)."""
+    """Claude API for optional AI research notes (separate from Claude Code)."""
 
     name = "claude"
-    display_name = "Claude API (AI analyst)"
+    display_name = "Claude API (AI research notes)"
     category = ProviderCategory.AI
     required_env = ["ANTHROPIC_API_KEY"]
 
@@ -44,12 +43,11 @@ class ClaudeProvider(Provider):
 
 def build_providers(settings: Settings) -> list[Provider]:
     return [
-        ShopifyProvider(settings),
-        ClaudeProvider(settings),
+        AlpacaProvider(settings),
         MassiveProvider(settings),
         FMPProvider(settings),
         EdgarProvider(settings),
-        EbayProvider(settings),
+        ClaudeProvider(settings),
     ]
 
 

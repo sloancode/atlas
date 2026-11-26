@@ -41,29 +41,6 @@ export async function generateResearchAI(form: FormData) {
   go(`/research?symbol=${encodeURIComponent(s)}`, r.ok ? "AI research note generated." : r.error);
 }
 
-export async function paperTrade(form: FormData) {
-  const r = await apiSend<{ symbol: string; side: string; quantity: number; price: number; price_source: string }>(
-    "POST", "/api/markets/paper/trades", {
-      symbol: sym(form.get("symbol")), side: form.get("side") === "sell" ? "sell" : "buy",
-      quantity: String(form.get("quantity") ?? "").trim(), thesis: String(form.get("thesis") ?? "").trim() || null,
-    });
-  go("/portfolio", r.ok
-    ? `SIMULATED ${r.data.side} ${r.data.quantity} ${r.data.symbol} @ ${r.data.price} (${r.data.price_source}).`
-    : `Not filled: ${r.error}`);
-}
-
-export async function paperReset(form: FormData) {
-  const r = await apiSend("POST", "/api/markets/paper/reset", { starting_cash: String(form.get("starting_cash") ?? "").trim() });
-  go("/portfolio", r.ok ? "Simulated portfolio reset." : r.error);
-}
-
-export async function paperJournal(form: FormData) {
-  const r = await apiSend("PATCH", `/api/markets/paper/trades/${Number(form.get("id"))}`, {
-    lesson: String(form.get("lesson") ?? ""),
-  });
-  go("/portfolio", r.ok ? "Journal saved." : r.error);
-}
-
 export type ScanState = { results: ScanResult[] | null; rules: { metric: string; op: string; value: unknown }[]; error: string | null; note?: string };
 
 export async function runScan(_prev: ScanState, form: FormData): Promise<ScanState> {

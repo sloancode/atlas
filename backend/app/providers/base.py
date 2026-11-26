@@ -3,7 +3,7 @@
 A provider reports its configuration state without ever exposing secret
 values, and performs a lightweight live check on request. Engines depend on
 these interfaces, not on concrete vendors, so a provider can be swapped or
-added (e.g. eBay) without touching the rest of the application.
+added without touching the rest of the application.
 """
 
 from abc import ABC, abstractmethod
@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 
 class ProviderCategory(StrEnum):
-    COMMERCE = "commerce"  # Shopify, eBay
+    BROKER = "broker"  # Alpaca paper trading
     MARKET_DATA = "market_data"  # Massive, FMP
     FILINGS = "filings"  # SEC EDGAR
     AI = "ai"  # Claude API

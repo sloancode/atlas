@@ -13,7 +13,7 @@ _PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"sk-ant-[A-Za-z0-9_\-]+"), "sk-ant-[REDACTED]"),
     (
         re.compile(
-            r"(?i)(x-shopify-access-token|authorization|client_secret|access_token|api[_-]?key|apikey)"
+            r"(?i)(apca-api-secret-key|apca-api-key-id|x-shopify-access-token|authorization|client_secret|access_token|api[_-]?key|apikey)"
             r"(['\"]?\s*[:=]\s*['\"]?)([^\s'\",&}]+)"
         ),
         r"\1\2[REDACTED]",

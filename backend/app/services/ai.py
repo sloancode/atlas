@@ -1,37 +1,24 @@
-"""Grounded AI business analyst (Claude API) with independent verification.
+"""Grounded Claude calls with independent verification (used by AI research notes).
 
-1. Build a *data pack*: flatten ATLAS's computed analytics into facts with
-   stable IDs (e.g. `kpi_30d.net_sales.current = 86.0`). Claude sees only this.
+1. Flatten computed data into facts with stable IDs; Claude sees only these.
 2. Ask Claude for a structured answer where every statement is typed
    (fact | estimate | interpretation) and cites fact IDs.
-3. Verify in code, not by asking the model: cited IDs must exist, and every
-   number stated in a `fact` must match a cited value. Anything that fails is
-   marked unverified with the reason -- never silently passed through.
-
-The analyst never takes actions; it only reads ATLAS's synced data.
+3. Verify in code: cited IDs must exist and every number stated in a `fact`
+   must match a cited value. Failures are marked unverified with the reason.
 """
 
 import json
 import logging
 import re
-from datetime import date, datetime
 from typing import Any, Literal
 
 import anthropic
 from pydantic import BaseModel, Field, ValidationError
-from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.logging import redact
-from app.services.analytics.context import PeriodKey, load_shop_context, resolve_periods
-from app.services.analytics.products import inventory_report, products_report
-from app.services.analytics.profitability import profitability
-from app.services.analytics.sales import sales_overview
 
 log = logging.getLogger(__name__)
-
-MAX_PRODUCTS_IN_PACK = 40
-MAX_QUESTION_CHARS = 2000
 
 
 class AIError(Exception):
@@ -60,85 +47,6 @@ def flatten(obj: Any, prefix: str = "") -> dict[str, Any]:
 
 def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")[:40] or "item"
-
-
-def build_store_pack(s: Session, today: date | None = None) -> dict[str, Any]:
-    ctx = load_shop_context(s)
-    today = today or datetime.now(ctx.tz).date()
-    pack: dict[str, Any] = {
-        "meta": {
-            "shop": ctx.name,
-            "currency": ctx.currency,
-            "timezone": ctx.timezone,
-            "today": today.isoformat(),
-            "data_as_of": ctx.last_order_sync.isoformat() if ctx.last_order_sync else None,
-            "orders_history_limited_to_60_days": not ctx.has_all_orders,
-        }
-    }
-    for key in (PeriodKey.D7, PeriodKey.D30):
-        cur, prev = resolve_periods(key, ctx.tz, today=today)
-        ov = sales_overview(s, ctx, cur, prev)
-        pack[f"kpi_{key.value}"] = {
-            "period": f"{cur.period.start}..{cur.period.end}",
-            "previous_period": f"{prev.period.start}..{prev.period.end}",
-            **{
-                k.key: {"current": k.current, "previous": k.previous, "change_pct": k.change_pct}
-                for k in ov.kpis
-            },
-        }
-    cur, prev = resolve_periods(PeriodKey.D30, ctx.tz, today=today)
-    prods = products_report(s, ctx, cur, prev, today=today)
-    chosen = [p for p in prods.products if p.in_catalog][:MAX_PRODUCTS_IN_PACK]
-    products: dict[str, Any] = {}
-    used: set[str] = set()
-    for p in chosen:
-        key = _slug(p.title)
-        while key in used:
-            key += "_"
-        used.add(key)
-        products[key] = {
-            "title": p.title,
-            "net_sales_30d": p.net_sales,
-            "prev_net_sales_30d": p.prev_net_sales,
-            "growth_pct": p.growth_pct,
-            "units_sold_30d": p.units_sold,
-            "units_returned_30d": p.units_returned,
-            "orders_30d": p.orders,
-            "rank_30d": p.rank,
-            "available_units": p.available,
-            "velocity_units_per_day": p.velocity_per_day,
-            "days_of_cover": p.days_of_cover,
-            "price_min": p.price_min,
-            "opportunity_score": p.opportunity.score if p.opportunity else None,
-            "opportunity_confidence": p.opportunity.confidence if p.opportunity else None,
-            "flags": [f"{f.label}: {f.reason}" for f in p.flags],
-        }
-    pack["products"] = products
-    pack["products_note"] = (
-        f"{len(chosen)} of {sum(1 for p in prods.products if p.in_catalog)} "
-        "catalog products included."
-    )
-    inv = inventory_report(s, ctx, today=today)
-    pack["inventory_alerts"] = [
-        {
-            "product": v.product_title,
-            "variant": v.variant_title,
-            "status": v.status,
-            "available": v.available,
-            "days_of_cover": v.days_of_cover,
-            "reason": " ".join(v.reasons),
-        }
-        for v in inv.variants
-        if v.status not in ("ok", "untracked")
-    ]
-    pnl = profitability(s, ctx, cur)
-    pack["profitability_30d"] = {
-        **{m.key: {"value": m.value, "status": m.status.value} for m in pnl.metrics},
-        "missing_cost_inputs": pnl.missing_inputs,
-        "cogs_coverage_pct": pnl.cogs_coverage_pct,
-    }
-    pack["seasonality"] = prods.seasonality
-    return pack
 
 
 def pack_to_facts(pack: dict[str, Any]) -> dict[str, Any]:
@@ -187,8 +95,8 @@ OUTPUT_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
 }
 
-SYSTEM_PROMPT = """You are the business analyst inside ATLAS, a read-only analytics tool for one \
-Shopify store. You answer the owner's questions using ONLY the DATA PACK in the user message.
+SYSTEM_PROMPT = """You are the analyst inside ATLAS, a read-only market research tool. You answer \
+the owner's questions using ONLY the DATA PACK in the user message.
 
 Each DATA PACK line is `fact_id = value`. Treat it as the complete set of available data.
 
@@ -202,13 +110,11 @@ how it was derived in the text.
 would confirm or refute it.
 - Cite the fact_ids each item relies on in `citations`, exactly as written in the data pack. \
 Facts and estimates must cite at least one fact_id.
-- If the data cannot answer the question (no sales yet, missing costs, history limits, a metric \
-ATLAS does not track), set insufficient_data to true and say precisely what is missing. Never \
-fill gaps with plausible-sounding numbers, industry averages, or outside knowledge about this store.
-- Profit is not revenue. If profitability metrics are "incomplete" or missing, say so.
-- Recommendations are areas to investigate, not instructions. ATLAS cannot change the store, \
-and you must not suggest that it will.
-- Currency and dates are as given in the data pack (shop timezone).
+- If the data cannot answer the question (missing data, history limits, a metric ATLAS does not \
+track), set insufficient_data to true and say precisely what is missing. Never \
+fill gaps with plausible-sounding numbers, industry averages, or outside knowledge.
+- Recommendations are areas to investigate, not instructions or financial advice.
+- Currency and dates are as given in the data pack.
 - `summary` is one or two plain sentences answering the question at a glance; it must not \
 contain numbers that are not in the items.
 - Offer up to three short follow-up questions the data pack could answer."""
@@ -343,22 +249,6 @@ class VerifiedItem(BaseModel):
     cited_values: dict[str, Any]
 
 
-class AnalystAnswer(BaseModel):
-    question: str
-    summary: str
-    items: list[VerifiedItem]
-    insufficient_data: bool
-    follow_up_questions: list[str]
-    verification: dict[str, int]
-    model: str | None = None
-    data_as_of: str | None = None
-    generated_at: datetime
-    disclaimer: str = (
-        "Facts are checked against ATLAS data. Estimates and interpretations are AI-generated "
-        "and may be wrong. ATLAS never acts on your store."
-    )
-
-
 def verify(answer: Any, facts: dict[str, Any]) -> list[VerifiedItem]:
     results = []
     for item in answer.items:
@@ -391,62 +281,3 @@ def verify(answer: Any, facts: dict[str, Any]) -> list[VerifiedItem]:
             )
         )
     return results
-
-
-async def ask_analyst(
-    s: Session,
-    settings: Settings,
-    question: str,
-    *,
-    client: anthropic.AsyncAnthropic | None = None,
-    today: date | None = None,
-) -> AnalystAnswer:
-    question = question.strip()
-    if not question:
-        raise AIError("Ask a question.")
-    if len(question) > MAX_QUESTION_CHARS:
-        raise AIError(f"Questions are limited to {MAX_QUESTION_CHARS} characters.")
-    pack = build_store_pack(s, today)
-    facts = pack_to_facts(pack)
-    answer, meta = await call_claude(settings, render_pack(facts), question, client)
-    items = verify(answer, facts)
-    return AnalystAnswer(
-        question=question,
-        summary=answer.summary,
-        items=items,
-        insufficient_data=answer.insufficient_data,
-        follow_up_questions=answer.follow_up_questions[:3],
-        verification={
-            "verified": sum(i.verified for i in items),
-            "unverified": sum(not i.verified for i in items),
-            "facts": sum(i.type == "fact" for i in items),
-            "estimates": sum(i.type == "estimate" for i in items),
-            "interpretations": sum(i.type == "interpretation" for i in items),
-        },
-        model=meta.get("model"),
-        data_as_of=pack["meta"]["data_as_of"],
-        generated_at=datetime.now().astimezone(),
-    )
-
-
-REPORT_QUESTION = (
-    "Write a short interpretation of this report for the store owner: what stands out, what "
-    "the most important area to investigate is and why. Use items; keep it under 8 items."
-)
-
-
-async def report_narrative(
-    settings: Settings,
-    report_facts: dict[str, Any],
-    *,
-    client: anthropic.AsyncAnthropic | None = None,
-) -> dict[str, Any]:
-    facts = pack_to_facts({"report": report_facts})
-    answer, meta = await call_claude(settings, render_pack(facts), REPORT_QUESTION, client)
-    items = verify(answer, facts)
-    return {
-        "summary": answer.summary,
-        "sections": [i.model_dump(exclude={"cited_values"}) for i in items],
-        "model": meta.get("model"),
-        "unverified": sum(not i.verified for i in items),
-    }

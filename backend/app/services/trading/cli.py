@@ -71,12 +71,15 @@ def parse_closes(bars_obj) -> dict[str, pd.Series]:
     return out
 
 
-def build_state(args) -> State:
-    account = _load(args.account) or {}
+def state_from_responses(
+    *, account, positions, open_orders, closed_orders, history, bars, now: datetime, paper: bool
+) -> State:
+    """Build planner input from Alpaca responses (raw or connector-wrapped)."""
+    account = account or {}
     acct_no = str(account.get("account_number", ""))
     if acct_no and not acct_no.upper().startswith("PA"):
         raise PlannerError("Account number does not look like an Alpaca paper account; refusing.")
-    positions = [
+    pos = [
         Position(
             p["symbol"],
             float(p["qty"]),
@@ -84,7 +87,7 @@ def build_state(args) -> State:
             float(p.get("current_price") or p["avg_entry_price"]),
             str(p.get("side", "long")).lower(),
         )
-        for p in _list(_load(args.positions), "result", "positions")
+        for p in _list(positions, "result", "positions")
     ]
     opens = [
         OpenOrder(
@@ -95,25 +98,37 @@ def build_state(args) -> State:
             _f(o.get("qty")),
             _f(o.get("stop_price")),
         )
-        for o in _list(_load(args.open_orders), "orders", "result")
+        for o in _list(open_orders, "orders", "result")
     ]
     closed = [
         ClosedOrder(o["symbol"], str(o["side"]).lower(), _dt(o.get("filled_at")))
-        for o in _list(_load(args.closed_orders), "orders", "result")
+        for o in _list(closed_orders, "orders", "result")
     ]
-    hist = _load(args.history) or {}
+    hist = history or {}
     equity_hist = [float(x) for x in (hist.get("equity") or []) if x is not None]
-    now = _dt(args.now) if args.now else datetime.now(UTC)
     return State(
         now=now,
         equity=float(account["equity"]),
         cash=float(account["cash"]),
-        account_is_paper=args.paper,
-        positions=positions,
+        account_is_paper=paper,
+        positions=pos,
         open_orders=opens,
         closed_orders=closed,
         equity_history=equity_hist,
-        closes=parse_closes(_load(args.bars)),
+        closes=parse_closes(bars),
+    )
+
+
+def build_state(args) -> State:
+    return state_from_responses(
+        account=_load(args.account),
+        positions=_load(args.positions),
+        open_orders=_load(args.open_orders),
+        closed_orders=_load(args.closed_orders),
+        history=_load(args.history),
+        bars=_load(args.bars),
+        now=_dt(args.now) if args.now else datetime.now(UTC),
+        paper=args.paper,
     )
 
 

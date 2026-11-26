@@ -9,36 +9,18 @@ retrieval timestamp, reporting period and status (`live`, `delayed`, `historical
 `estimated`, `incomplete`, `missing`, `simulated`). Missing data is `None` + `missing`,
 never a placeholder number.
 
-## Shopify
+## Alpaca (paper trading)
 
 | | |
 |---|---|
-| API | Admin GraphQL, pinned version `2026-10` (`SHOPIFY_API_VERSION`) |
-| Auth | Dev Dashboard app + **client credentials grant** (`SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET`). Tokens are short-lived (~24h) and refreshed automatically. A legacy admin-created custom app token (`SHOPIFY_ADMIN_ACCESS_TOKEN`) is also accepted. |
-| Required scopes | `read_products`, `read_inventory`, `read_orders`, `read_locations` |
-| Optional scopes | `read_reports` (ShopifyQL analytics), `read_all_orders` (order history older than 60 days) |
-| Autopilot only | `write_products`, `write_discounts`, `read_publications`, `write_publications` (needed only to let the agent change the store) |
-| Not requested | `read_customers` (not needed; avoids holding personal data), other `write_*` scopes |
-| Safety | `ShopifyClient.query` rejects every mutation; Autopilot writes go through `raw_mutate`, which accepts only its five allow-listed documents (`app/services/autopilot/writer.py`) |
-| Analytics | ShopifyQL via `shopifyqlQuery` (`read_reports`): sessions, cart, checkout, conversion, traffic sources |
-| Sync | Full catalog sync (deleted items reconciled) + incremental orders by `updated_at`; hourly by default (`SHOPIFY_SYNC_INTERVAL_MINUTES`, 0 = off); manual `POST /api/shopify/sync` |
-| Limits | Cost-based throttling: on `THROTTLED`, waits `(requested − available) / restoreRate` seconds; 429/5xx retried with backoff (max 5 attempts) |
+| Hosts | `https://paper-api.alpaca.markets` (account, positions, orders, clock, portfolio history) and `https://data.alpaca.markets` (daily bars). No live-trading host exists in ATLAS. |
+| Keys | `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY` (paper keys from the Alpaca dashboard), sent as `APCA-API-KEY-ID` / `APCA-API-SECRET-KEY` headers, redacted from logs |
+| Data feed | `ALPACA_DATA_FEED`, default `iex` (free); `sip` needs an Alpaca data plan. Bars are split/dividend adjusted (`adjustment=all`). |
+| Safety | `AlpacaPaperClient` has no order methods; the account number must start with `PA` (paper) or the request is refused |
+| Website | `GET /api/bot/overview` (live account + dry-run plan), `GET /api/bot/rules`, `GET /api/bot/journal` |
+| Orders | Placed only by the scheduled bot run from the planner's output (docs/TRADING_BOT.md) |
 
-**Setup**
-
-1. Open the Shopify Dev Dashboard and create an app.
-2. In the app's version, select only the scopes above. Release the version.
-3. Install the app on your store.
-4. Copy the client ID and client secret into `backend/.env`:
-   `SHOPIFY_STORE_DOMAIN`, `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET`.
-5. Restart the API and run the live check in **Settings**. ATLAS verifies the granted
-   scopes and warns about missing required scopes or unneeded write scopes.
-
-Note: Shopify no longer allows creating new custom apps directly in the Shopify admin;
-the Dev Dashboard is the supported route. The client credentials grant works for stores
-in your own Shopify organization.
-
-## Claude API (AI analyst)
+## Claude API (optional AI research notes)
 
 | | |
 |---|---|
@@ -47,9 +29,9 @@ in your own Shopify organization.
 | Model | `ANTHROPIC_MODEL`, default `claude-opus-5-5`; adaptive thinking, effort `high` |
 | Output | structured JSON (`output_config.format` json_schema): typed items with citations |
 | Refusals | refusal fallback **off** (owner's choice): if Claude declines, ATLAS reports it instead of retrying on another model. Uses the standard `client.messages.create` endpoint. |
-| Data sent | aggregated store metrics and product titles/numbers only — no customer data, no credentials |
-| Cost | one request per question, or per report narrative you request (a few cents each). Automatic report narratives are off (`AI_REPORT_NARRATIVES=false`); set it to `true` to turn them on |
-| Without a key | reports and analytics work; the analyst and AI narratives show "not configured" |
+| Data sent | the research snapshot for one symbol (prices, indicators, fundamentals, retrieved news) — no credentials |
+| Cost | one request per research note you request (a few cents each) |
+| Without a key | everything works except the optional AI research note |
 
 ## Market data routing
 
@@ -76,12 +58,3 @@ Free; requires `SEC_USER_AGENT` (descriptive name + contact email, per SEC fair-
 Ticker → CIK via `www.sec.gov/files/company_tickers.json`; annual financials from
 `data.sec.gov/api/xbrl/companyfacts/CIK##########.json` (10-K, full fiscal-year durations, latest
 filing/amendment wins). US-listed SEC filers only.
-
-## eBay Sell APIs — planned, disabled
-
-`backend/app/providers/ebay/provider.py`. Never makes network calls. Planned APIs: Inventory,
-Fulfillment, Account, Analytics, Finances, with OAuth authorization-code grant and read-only
-scopes, after explicit account-owner approval. Data will live in the `ebay` schema; a
-cross-platform product identity table in `core` will link the same product on both channels
-so it is not counted as two products, and orders are keyed per platform so sales are never
-double-counted.

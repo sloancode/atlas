@@ -6,11 +6,10 @@
 # Creates a local database, a backend/.env from the template (if missing),
 # installs dependencies and applies migrations.
 #
-# It never asks for, prints or stores your Shopify secret: you add that to
+# It never asks for, prints or stores your Alpaca keys: you add them to
 # backend/.env yourself.
 set -euo pipefail
 
-STORE_DOMAIN="${ATLAS_STORE_DOMAIN:-rcae4k-sp.myshopify.com}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
 step() { printf '\n\033[1;33m==> %s\033[0m\n' "$*"; }
@@ -50,12 +49,15 @@ echo "$(uv --version)"
 step "Creating backend/.env"
 cd "$ROOT/backend"
 if [ -f .env ]; then
-  echo "backend/.env already exists; leaving it unchanged."
+  echo "backend/.env already exists; keeping your values."
+  if ! grep -q '^ALPACA_API_KEY_ID=' .env; then
+    printf '\n# Alpaca PAPER trading keys (added by setup)\nALPACA_API_KEY_ID=\nALPACA_API_SECRET_KEY=\nALPACA_DATA_FEED=iex\n' >> .env
+    echo "Added empty ALPACA_* lines to backend/.env for you to fill in."
+  fi
 else
   cp .env.example .env
-  sed -i "s|^SHOPIFY_STORE_DOMAIN=.*|SHOPIFY_STORE_DOMAIN=${STORE_DOMAIN}|" .env
   chmod 600 .env
-  echo "Created backend/.env for ${STORE_DOMAIN}."
+  echo "Created backend/.env."
 fi
 
 step "Installing backend dependencies and applying migrations"
@@ -71,9 +73,9 @@ cat <<EOF
 $(printf '\033[1;32m')Setup complete.$(printf '\033[0m')
 
 Next:
-  1. Add your Shopify app credentials (only you should see these):
+  1. Add your Alpaca PAPER keys (only you should see these):
        nano $ROOT/backend/.env
-     Fill in SHOPIFY_CLIENT_ID= and SHOPIFY_CLIENT_SECRET=, then Ctrl+O, Enter, Ctrl+X.
+     Fill in ALPACA_API_KEY_ID= and ALPACA_API_SECRET_KEY=, then Ctrl+O, Enter, Ctrl+X.
   2. Start ATLAS:
        $ROOT/scripts/run.sh
   3. Open http://localhost:3000 in Chrome.

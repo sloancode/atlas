@@ -9,7 +9,7 @@ const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono-face" }
 
 export const metadata: Metadata = {
   title: "ATLAS",
-  description: "Business intelligence and market research terminal",
+  description: "Paper trading bot dashboard and market research",
 };
 
 export const dynamic = "force-dynamic";

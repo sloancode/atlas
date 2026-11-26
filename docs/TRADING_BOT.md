@@ -26,6 +26,21 @@ Every trading hour (9:41–15:41 ET, Mon–Fri) a scheduled Claude session:
 The broker is the source of truth: the planner keeps no state of its own. Every plan is also
 appended to `backend/data/trading/plans.jsonl` (git-ignored).
 
+## The website (bot dashboard)
+
+`http://localhost:3000` on your computer, with Alpaca paper keys in `backend/.env`:
+
+- **Bot dashboard**: equity, today's change, cash, market open/closed, the market filter (SPY vs its
+  200-day average), positions with their protective stops, open orders, orders from the last 30
+  days, a 3-month equity chart, and **"If the bot ran now"**: the planner run on live data as a dry
+  run (no orders are placed), plus the reason every skipped symbol was skipped.
+- **Run log**: plans recorded by planner runs on that computer (`backend/data/trading/plans.jsonl`).
+  The hourly cloud runs report in their Claude session instead.
+- **Rules & limits**: the exact rules and limits from `config.py`.
+
+The dashboard uses the same planner code as the bot, so its dry run matches what the next run
+would do with the same data. It has no order-placing code.
+
 ## Rules (trend-following swing)
 
 | | |
@@ -54,4 +69,5 @@ During the session "today's bar" is still forming, so the last price is the late
 - Stops are stop-market orders: a gap down can fill well below the stop price.
 - Hourly runs depend on the scheduled session; if a run is missed, stops still protect
   positions at the broker.
+- The website's run log only shows runs made on that computer; cloud runs report in their session.
 - Changing to real money would need a new, explicit decision by the owner and new code.

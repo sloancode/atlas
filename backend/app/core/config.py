@@ -11,15 +11,9 @@ from typing import Annotated
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
-# Pinned Admin API version. Bump deliberately, never implicitly.
-SHOPIFY_API_VERSION = "2026-10"
-
-# Least-privilege scopes ATLAS needs. ATLAS is read-only.
-SHOPIFY_REQUIRED_SCOPES: frozenset[str] = frozenset(
-    {"read_products", "read_inventory", "read_orders", "read_locations"}
-)
-# Helpful but optional (ShopifyQL analytics; >60-day order history).
-SHOPIFY_OPTIONAL_SCOPES: frozenset[str] = frozenset({"read_reports", "read_all_orders"})
+# Alpaca PAPER endpoints only. ATLAS has no live-trading endpoint anywhere.
+ALPACA_PAPER_BASE_URL = "https://paper-api.alpaca.markets"
+ALPACA_DATA_BASE_URL = "https://data.alpaca.markets"
 
 
 class Settings(BaseSettings):
@@ -43,41 +37,22 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:3000"]
     )
 
-    # --- Shopify (read-only) -------------------------------------------------
-    shopify_store_domain: str | None = None  # e.g. "example.myshopify.com"
-    # Dev Dashboard app, client credentials grant (preferred for new apps).
-    shopify_client_id: str | None = None
-    shopify_client_secret: SecretStr | None = None
-    # Legacy admin-created custom app token (only if you already have one).
-    shopify_admin_access_token: SecretStr | None = None
-    # Background sync cadence; 0 disables the scheduler (manual sync still works).
-    shopify_sync_interval_minutes: int = Field(default=60, ge=0)
+    # --- Alpaca paper trading (read-only from the website) -----------------
+    # Free paper keys from the Alpaca dashboard (Paper Trading > API keys).
+    alpaca_api_key_id: SecretStr | None = None
+    alpaca_api_secret_key: SecretStr | None = None
+    # Market data feed for daily bars: "iex" works on free accounts; "sip" needs a data plan.
+    alpaca_data_feed: str = "iex"
 
-    # --- AI analysis (Claude API, separate from Claude Code) -----------------
+    # --- AI research notes (Claude API, separate from Claude Code; optional) -
     anthropic_api_key: SecretStr | None = None
     anthropic_model: str = "claude-opus-5-5"
-    # Add an AI interpretation to scheduled reports (a few cents per report). Off by owner's choice;
-    # narratives can still be generated on demand from the Reports page.
-    ai_report_narratives: bool = False
 
     # --- Market data providers ----------------------------------------------
     massive_api_key: SecretStr | None = None
     fmp_api_key: SecretStr | None = None
     # SEC requires a descriptive User-Agent with contact info for EDGAR access.
     sec_user_agent: str | None = None
-
-    # --- eBay (future; not connected) ---------------------------------------
-    ebay_enabled: bool = False
-
-    @field_validator("shopify_store_domain")
-    @classmethod
-    def _normalize_domain(cls, v: str | None) -> str | None:
-        if not v:
-            return None
-        v = v.strip().lower().removeprefix("https://").removeprefix("http://").rstrip("/")
-        if not v.endswith(".myshopify.com"):
-            raise ValueError("SHOPIFY_STORE_DOMAIN must be a *.myshopify.com domain")
-        return v
 
     @field_validator("cors_origins", mode="before")
     @classmethod

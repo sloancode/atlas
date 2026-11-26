@@ -10,23 +10,16 @@ from app.core.provenance import DataPoint, DataStatus, Period, Provenance
 from tests.conftest import FAKE_SECRET, FAKE_TOKEN
 
 
-def test_secrets_not_in_repr(shopify_settings: Settings) -> None:
-    assert FAKE_SECRET not in repr(shopify_settings)
-    assert FAKE_SECRET not in shopify_settings.model_dump_json()
-
-
-def test_domain_normalized_and_validated() -> None:
-    s = Settings(_env_file=None, shopify_store_domain="https://Foo.myshopify.com/")
-    assert s.shopify_store_domain == "foo.myshopify.com"
-    with pytest.raises(ValidationError):
-        Settings(_env_file=None, shopify_store_domain="evil.example.com")
+def test_secrets_not_in_repr(alpaca_settings: Settings) -> None:
+    assert FAKE_SECRET not in repr(alpaca_settings)
+    assert FAKE_SECRET not in alpaca_settings.model_dump_json()
 
 
 @pytest.mark.parametrize(
     "raw",
     [
         f"token={FAKE_TOKEN}",
-        f"X-Shopify-Access-Token: {FAKE_TOKEN}",
+        f"APCA-API-SECRET-KEY: {FAKE_SECRET}",
         f"client_secret={FAKE_SECRET}&grant_type=x",
         "apikey=abc123def",
         "postgresql+psycopg://atlas:hunter2@db:5432/atlas",
@@ -50,8 +43,8 @@ def test_missing_datapoint_cannot_carry_value() -> None:
         DataPoint[float](value=12.5, provenance=Provenance(source="x", status=DataStatus.MISSING))
     with pytest.raises(ValidationError):
         DataPoint[float](value=None, provenance=Provenance(source="x", status=DataStatus.LIVE))
-    dp = DataPoint[float].missing("shopify", "no orders in period")
-    assert dp.value is None and dp.provenance.notes == ["no orders in period"]
+    dp = DataPoint[float].missing("alpaca", "no bars in period")
+    assert dp.value is None and dp.provenance.notes == ["no bars in period"]
 
 
 def test_period() -> None:
@@ -68,26 +61,27 @@ def test_env_example_loads_as_shipped(tmp_path, monkeypatch) -> None:
 
     example = Path(__file__).resolve().parents[1] / ".env.example"
     env = tmp_path / ".env"
-    env.write_text(
-        example.read_text().replace(
-            "SHOPIFY_STORE_DOMAIN=your-store.myshopify.com",
-            "SHOPIFY_STORE_DOMAIN=rcae4k-sp.myshopify.com",
-        )
-    )
-    for var in ("CORS_ORIGINS", "DATABASE_URL", "FMP_API_KEY", "MASSIVE_API_KEY"):
+    env.write_text(example.read_text())
+    for var in (
+        "CORS_ORIGINS",
+        "DATABASE_URL",
+        "FMP_API_KEY",
+        "MASSIVE_API_KEY",
+        "ALPACA_API_KEY_ID",
+        "ALPACA_API_SECRET_KEY",
+    ):
         monkeypatch.delenv(var, raising=False)
     s = Settings(_env_file=env)
     assert s.cors_origins == ["http://localhost:3000"]
-    assert s.shopify_store_domain == "rcae4k-sp.myshopify.com"
+    assert s.alpaca_api_key_id is None and s.alpaca_data_feed == "iex"
     assert s.fmp_api_key is None and s.anthropic_api_key is None
     states = {p.name: p.config_status().state for p in build_providers(s)}
     assert states == {
-        "shopify": "not_configured",
-        "claude": "not_configured",
+        "alpaca": "not_configured",
         "massive": "not_configured",
         "fmp": "not_configured",
         "sec_edgar": "not_configured",
-        "ebay": "planned",
+        "claude": "not_configured",
     }
 
 

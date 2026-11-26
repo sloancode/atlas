@@ -10,7 +10,7 @@ export function Sidebar() {
     <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-panel">
       <div className="flex h-11 items-center gap-2 border-b border-border px-4">
         <span className="num text-[15px] font-semibold tracking-[0.2em] text-accent">ATLAS</span>
-        <span className="text-[10px] uppercase tracking-wider text-faint">v0.1</span>
+        <span className="text-[10px] uppercase tracking-wider text-faint">paper bot</span>
       </div>
       <nav className="flex-1 overflow-y-auto py-2" aria-label="Main">
         {NAV.map((group) => (
@@ -35,11 +35,6 @@ export function Sidebar() {
                     {item.code}
                   </span>
                   <span className="flex-1">{item.label}</span>
-                  {item.comingSoon && (
-                    <span className="rounded-sm border border-border px-1 text-[9px] uppercase text-faint">
-                      Soon
-                    </span>
-                  )}
                 </Link>
               );
             })}
@@ -47,7 +42,7 @@ export function Sidebar() {
         ))}
       </nav>
       <div className="border-t border-border px-4 py-3 text-[11px] leading-relaxed text-faint">
-        ATLAS changes your store only through Autopilot, within your limits, and never places orders, refunds or trades.
+        Paper trading only (simulated money). This website never places orders; the scheduled bot does, within fixed limits.
       </div>
     </aside>
   );
