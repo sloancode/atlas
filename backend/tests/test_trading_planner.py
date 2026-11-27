@@ -8,186 +8,431 @@ import pytest
 from app.services.trading import cli
 from app.services.trading.config import BotConfig
 from app.services.trading.planner import (
+    Asset,
     ClosedOrder,
+    NewsScore,
     OpenOrder,
     PlannerError,
     Position,
+    Snapshot,
     State,
     make_plan,
 )
 
 ET = ZoneInfo("America/New_York")
-MORNING = datetime(2026, 11, 23, 10, 35, tzinfo=ET)
-CLOSE = datetime(2026, 11, 23, 15, 35, tzinfo=ET)
+NOW = datetime(2026, 11, 30, 11, 0, tzinfo=ET)
+CFG = BotConfig()
 
 
-def line(start: float, step: float, n: int = 220) -> pd.Series:
-    return pd.Series([start + step * i for i in range(n)])
+def daily(n: int = 25, close: float = 100.0, vol: float = 1_000_000) -> pd.DataFrame:
+    # high-low range 2 every day -> ATR(14) = 2
+    return pd.DataFrame(
+        {"open": close, "high": close + 1, "low": close - 1, "close": close, "volume": vol},
+        index=range(n),
+    )
 
 
-def up(rate: float = 0.5) -> pd.Series:
-    return line(100, rate)
+def up_snap(**kw) -> Snapshot:  # 5/5 long checks
+    base = dict(last=106.0, prev_close=100.0, open=102.0, vwap=104.0, volume=1_000_000)
+    base.update(kw)
+    return Snapshot(**base)
 
 
-def flat() -> pd.Series:
-    return line(100, 0.0)
+def down_snap(**kw) -> Snapshot:  # 5/5 short checks
+    base = dict(last=94.0, prev_close=100.0, open=98.0, vwap=96.0, volume=1_000_000)
+    base.update(kw)
+    return Snapshot(**base)
 
 
-def down() -> pd.Series:
-    return line(300, -0.5)
-
-
-CFG = BotConfig(universe=("SPY", "AAA", "BBB", "CCC", "DDD"), max_positions=3)
-
-
-def state(closes, **kw) -> State:
+def state(snaps=None, **kw) -> State:
+    snaps = snaps or {}
     base = dict(
-        now=MORNING,
+        now=NOW,
         equity=100_000.0,
-        cash=100_000.0,
+        last_equity=100_000.0,
+        buying_power=200_000.0,
         account_is_paper=True,
+        shorting_enabled=True,
         positions=[],
         open_orders=[],
         closed_orders=[],
-        equity_history=[],
-        closes=closes,
+        equity_history=[100_000.0],
+        snapshots=snaps,
+        daily={s: daily() for s in snaps},
+        news={},
+        assets={},
     )
     base.update(kw)
     return State(**base)
 
 
-def buys(plan):
-    return [a for a in plan.actions if a.action == "buy"]
+def acts(plan, kind=None):
+    return [a for a in plan.actions if kind is None or a.action == kind]
 
 
-def test_buys_strongest_uptrends_sized_at_10pct_whole_shares():
-    closes = {"SPY": up(0.3), "AAA": up(1.0), "BBB": up(0.6), "CCC": down(), "DDD": flat()}
-    plan = make_plan(state(closes), CFG)
-    b = buys(plan)
-    assert [a.symbol for a in b] == ["AAA", "BBB"]  # ranked by relative strength
-    last = float(closes["AAA"].iloc[-1])
-    assert b[0].qty == int(10_000 // last)
-    assert b[0].type == "market" and b[0].time_in_force == "day"
-    assert b[0].client_order_id == "atlas-buy-AAA-20261123-10"
-    reasons = {s["symbol"]: s["reason"] for s in plan.skipped}
-    assert "uptrend" in reasons["CCC"] and "uptrend" in reasons["DDD"]
+def reason(plan, sym):
+    return next(s["reason"] for s in plan.skipped if s["symbol"] == sym)
 
 
-def test_no_buys_when_benchmark_below_200_day():
-    closes = {"SPY": pd.concat([up(0.3), pd.Series([50.0])], ignore_index=True), "AAA": up(1.0)}
-    plan = make_plan(state(closes), CFG)
-    assert buys(plan) == []
-    assert plan.summary["regime"] == "off"
-    assert any("200-day" in s["reason"] for s in plan.skipped if s["symbol"] == "AAA")
+def test_momentum_long_bracket_sized_by_risk_and_position_cap():
+    plan = make_plan(state({"AAA": up_snap()}))
+    [a] = acts(plan, "buy")
+    # stop distance = max(0.5 x ATR 2, 1.5% of 106) = 1.59; 1% risk -> 628 sh, 25% cap -> 235 sh
+    assert a.qty == 235 and a.side == "buy" and a.order_class == "bracket"
+    assert a.type == "market" and a.time_in_force == "gtc"
+    assert a.stop_loss_stop_price == 104.41 and a.take_profit_limit_price == 109.18
+    assert a.client_order_id == "atlasn-entry-AAA-20261130-1100"
+    assert "momentum" in a.reason
 
 
-def test_relative_strength_must_beat_benchmark():
-    closes = {"SPY": up(1.0), "AAA": up(0.4)}
-    plan = make_plan(state(closes), CFG)
-    assert buys(plan) == []
-    assert "trails SPY" in plan.skipped[-1]["reason"] or any(
-        "trails" in s["reason"] for s in plan.skipped
-    )
+def test_bad_news_short_needs_easy_to_borrow():
+    snaps = {"BAD": down_snap(last=95.0), "HTB": down_snap(last=95.0)}
+    news = {"BAD": NewsScore(-2, "guidance cut"), "HTB": NewsScore(-2, "probe")}
+    assets = {"BAD": Asset(True, True, True), "HTB": Asset(True, True, False)}
+    plan = make_plan(state(snaps, news=news, assets=assets))
+    [a] = acts(plan, "short")
+    assert a.symbol == "BAD" and a.side == "sell"
+    assert a.stop_loss_stop_price > 95 > a.take_profit_limit_price
+    assert "guidance cut" in a.reason
+    assert "easy to borrow" in reason(plan, "HTB")
 
 
-def test_cash_only_and_max_positions_and_daily_cap():
-    closes = {s: up(1.0 + i / 10) for i, s in enumerate(["AAA", "BBB", "CCC", "DDD"])}
-    closes["SPY"] = up(0.3)
-    # only $15k cash: one 10% position, then not enough for another full one -> partial size
-    plan = make_plan(state(closes, cash=15_000.0), CFG)
-    total = sum(a.qty * float(closes[a.symbol].iloc[-1]) for a in buys(plan))
-    assert total <= 15_000.0
-    # max positions 3 -> at most 3 buys
-    plan = make_plan(state(closes), CFG)
-    assert len(buys(plan)) == 3
-    # daily cap: 3 buys already filled today -> none
-    filled = [ClosedOrder("XLK", "buy", MORNING - timedelta(minutes=30)) for _ in range(3)]
+def test_shorting_off_at_broker_blocks_shorts():
     plan = make_plan(
-        state(closes, closed_orders=filled), BotConfig(universe=CFG.universe, max_positions=10)
+        state({"BAD": down_snap()}, shorting_enabled=False, assets={"BAD": Asset(True, True, True)})
     )
-    assert buys(plan) == []
+    assert acts(plan, "short") == [] and "shorting is off" in reason(plan, "BAD")
 
 
-def test_drawdown_pause_blocks_buys():
-    closes = {"SPY": up(0.3), "AAA": up(1.0)}
-    plan = make_plan(state(closes, equity=89_000.0, cash=89_000.0, equity_history=[100_000.0]), CFG)
-    assert buys(plan) == [] and plan.summary["buys_paused"] is True
+def test_news_needs_price_confirmation_and_no_news_needs_full_momentum():
+    snaps = {"GOOD": down_snap(), "MEH": up_snap(prev_close=105.0)}  # MEH: 4/5, up <2%
+    plan = make_plan(state(snaps, news={"GOOD": NewsScore(2, "beat")}))
+    assert acts(plan) == []
+    assert "not confirming" in reason(plan, "GOOD")
+    assert "momentum 4/5" in reason(plan, "MEH")
 
 
-def test_cooldown_after_sell():
-    closes = {"SPY": up(0.3), "AAA": up(1.0)}
-    sold = [ClosedOrder("AAA", "sell", MORNING - timedelta(days=2))]
-    plan = make_plan(state(closes, closed_orders=sold), CFG)
-    assert buys(plan) == []
+def test_good_news_with_three_checks_buys_and_ranks_first():
+    # 3/5: above VWAP, above open, volume; not up 2%, no breakout
+    weak = up_snap(last=100.5, prev_close=100.0, open=100.2, vwap=100.3)
+    plan = make_plan(state({"NEWS": weak, "MOMO": up_snap()}, news={"NEWS": NewsScore(2, "")}))
+    assert [a.symbol for a in acts(plan, "buy")] == ["NEWS", "MOMO"]  # 2*2+3 > 5
 
 
-def test_missing_stop_is_added_and_wrong_size_replaced():
-    closes = {"SPY": up(0.3), "AAA": up(1.0)}
-    pos = [Position("AAA", 10, 300.0, 318.0)]
-    plan = make_plan(state(closes, positions=pos), CFG)
-    stop = [a for a in plan.actions if a.action == "stop"][0]
-    assert (stop.qty, stop.stop_price, stop.time_in_force) == (10, 276.0, "gtc")
-    wrong = [OpenOrder("o1", "AAA", "sell", "stop", 5, 276.0)]
-    plan = make_plan(state(closes, positions=pos, open_orders=wrong), CFG)
-    kinds = [(a.action, a.order_id) for a in plan.actions if a.symbol == "AAA"]
-    assert ("cancel", "o1") in kinds and any(k == "stop" for k, _ in kinds)
-    ok = [OpenOrder("o2", "AAA", "sell", "stop", 10, 276.0)]
-    plan = make_plan(state(closes, positions=pos, open_orders=ok), CFG)
-    assert [a for a in plan.actions if a.symbol == "AAA"] == []
+def test_filters_price_and_liquidity():
+    snaps = {"PENNY": up_snap(last=4.0), "THIN": up_snap()}
+    st = state(snaps)
+    st.daily["THIN"] = daily(vol=5_000)
+    plan = make_plan(st)
+    assert "under $5" in reason(plan, "PENNY") and "thinly" in reason(plan, "THIN")
 
 
-def test_trend_exit_only_at_end_of_day():
-    broken = pd.concat([up(1.0), pd.Series([150.0])], ignore_index=True)
-    closes = {"SPY": up(0.3), "AAA": broken}
-    pos = [Position("AAA", 10, 300.0, 150.0)]
-    stop = [OpenOrder("s1", "AAA", "sell", "stop", 10, 276.0)]
-    morning = make_plan(state(closes, positions=pos, open_orders=stop), CFG)
-    assert not any(a.action == "sell" for a in morning.actions)
-    close = make_plan(state(closes, positions=pos, open_orders=stop, now=CLOSE), CFG)
-    acts = [(a.action, a.symbol) for a in close.actions]
-    assert acts[:2] == [("cancel", "AAA"), ("sell", "AAA")]
-    assert not any(a.action == "stop" for a in close.actions)  # no new stop for an exiting position
+@pytest.mark.parametrize(
+    "kw,text",
+    [
+        (dict(last_equity=104_000.0), "today (cap 3%)"),
+        (dict(equity_history=[120_000.0]), "below peak"),
+        (dict(now=NOW.replace(hour=15, minute=40)), "outside entry hours"),
+        (dict(now=NOW.replace(hour=9, minute=35)), "outside entry hours"),
+        (dict(equity=20_000.0, last_equity=20_000.0, equity_history=[]), "day-trading rule"),
+    ],
+)
+def test_guardrails_block_new_trades(kw, text):
+    plan = make_plan(state({"AAA": up_snap(volume=3_000_000)}, **kw))
+    assert acts(plan, "buy") == []
+    assert text in reason(plan, "AAA") and text in plan.summary["new_trades_blocked"]
 
 
-def test_refuses_live_short_or_margin():
-    closes = {"SPY": up(0.3)}
+def test_gross_exposure_cap_limits_size():
+    held = [Position("ZZZ", 1400, 100.0, 100.0, "long")]  # 140% gross already
+    stop = OpenOrder("s1", "ZZZ", "sell", "stop", 1400, 95.0)
+    plan = make_plan(state({"AAA": up_snap()}, positions=held, open_orders=[stop]))
+    [a] = acts(plan, "buy")
+    assert a.qty == 94  # 10k room / 106
+
+
+def test_max_positions_and_daily_trade_count():
+    snaps = {f"S{i}": up_snap() for i in range(3)}
+    cfg = BotConfig(max_new_trades_per_day=2)
+    filled = [ClosedOrder("OLD", "buy", NOW - timedelta(hours=1), "atlasn-entry-OLD-20261130-1000")]
+    plan = make_plan(state(snaps, closed_orders=filled), cfg)
+    assert len(acts(plan, "buy")) == 1
+    assert sum("max 2 new trades" in s["reason"] for s in plan.skipped) == 2
+
+
+def test_cooldown_after_recent_trade():
+    recent = [ClosedOrder("AAA", "sell", NOW - timedelta(minutes=10), "atlasn-exit-AAA-x")]
+    plan = make_plan(state({"AAA": up_snap()}, closed_orders=recent))
+    assert acts(plan, "buy") == [] and "last 30 min" in reason(plan, "AAA")
+
+
+def test_news_flip_closes_position_and_cancels_its_bracket_legs():
+    pos = [Position("AAA", 50, 100.0, 101.0, "long")]
+    legs = [
+        OpenOrder("tp", "AAA", "sell", "limit", 50),
+        OpenOrder("sl", "AAA", "sell", "stop", 50, 98.0),
+    ]
+    plan = make_plan(state(positions=pos, open_orders=legs, news={"AAA": NewsScore(-2, "fraud")}))
+    assert [(a.action, a.order_id) for a in acts(plan, "cancel")] == [
+        ("cancel", "tp"),
+        ("cancel", "sl"),
+    ]
+    [s] = acts(plan, "sell")
+    assert s.qty == 50 and s.side == "sell" and "fraud" in s.reason
+    assert s.client_order_id == "atlasn-exit-AAA-20261130-1100"
+
+
+def test_stale_short_is_covered_and_unprotected_short_gets_buy_stop():
+    pos = [
+        Position("OLD", 20, 50.0, 50.2, "short"),
+        Position("NEW", 10, 200.0, 198.0, "short"),
+    ]
+    stop_old = OpenOrder("s", "OLD", "buy", "stop", 20, 52.0)
+    entries = [
+        ClosedOrder("OLD", "sell", NOW - timedelta(days=4), "atlasn-entry-OLD-20261126-1000")
+    ]
+    plan = make_plan(state(positions=pos, open_orders=[stop_old], closed_orders=entries))
+    [c] = acts(plan, "cover")
+    assert c.symbol == "OLD" and c.side == "buy" and c.qty == 20
+    [st] = acts(plan, "stop")
+    assert (st.symbol, st.side, st.stop_price, st.time_in_force) == ("NEW", "buy", 210.0, "gtc")
+
+
+def test_protected_position_left_alone_and_breached_unprotected_closed():
+    pos = [Position("OK", 10, 100.0, 103.0, "long"), Position("BAD", 10, 100.0, 90.0, "long")]
+    plan = make_plan(
+        state(positions=pos, open_orders=[OpenOrder("s", "OK", "sell", "stop", 10, 98)])
+    )
+    assert [a.symbol for a in plan.actions] == ["BAD"]
+    assert plan.actions[0].action == "sell"
+
+
+def test_refuses_non_paper():
     with pytest.raises(PlannerError):
-        make_plan(state(closes, account_is_paper=False), CFG)
-    with pytest.raises(PlannerError):
-        make_plan(state(closes), BotConfig(allow_margin=True))
-    with pytest.raises(PlannerError):
-        make_plan(state(closes, positions=[Position("AAA", -5, 10, 10, side="short")]), CFG)
+        make_plan(state(account_is_paper=False))
 
 
-def test_cli_reads_connector_wrappers(tmp_path, capsys):
-    bars = {
-        "bars": {
-            s: [
-                {"t": f"2026-{1 + i // 28:02d}-{1 + i % 28:02d}T05:00:00Z", "c": float(v)}
-                for i, v in enumerate(ser)
-            ]
-            for s, ser in {"SPY": up(0.3), "AAPL": up(1.0)}.items()
-        }
-    }
-    wrap = lambda d: {"_alpaca_mcp_security": {"trust": "untrusted"}, "data": d}  # noqa: E731
+# ---------- CLI: real response shapes ----------
+
+
+def _bar(day: str, c=100.0, v=1_000_000):
+    return {"t": f"{day}T05:00:00Z", "o": c, "h": c + 1, "l": c - 1, "c": c, "v": v}
+
+
+def test_cli_end_to_end(tmp_path, capsys):
+    days = [f"2026-10-{d:02d}" for d in range(1, 29)]
     files = {
-        "bars": wrap(bars),
-        "account": wrap({"equity": "100000", "cash": "100000"}),
-        "positions": wrap({"result": []}),
-        "open-orders": wrap([]),
-        "closed-orders": wrap([]),
-        "history": wrap({"equity": [100000, 100000]}),
+        "account": {
+            "data": {
+                "account_number": "PA123",
+                "equity": "100000",
+                "last_equity": "100000",
+                "cash": "100000",
+                "buying_power": "200000",
+                "shorting_enabled": True,
+            },
+            "_alpaca_mcp_security": {},
+        },
+        "positions": [],
+        "open": [],
+        "closed": [],
+        "history": {"equity": [100000]},
+        "snapshots": {
+            "AAA": {
+                "dailyBar": {"t": "2026-11-30T05:00:00Z", "o": 102, "c": 105, "vw": 104, "v": 1e6},
+                "prevDailyBar": {"t": "2026-11-27T05:00:00Z", "c": 100},
+                "latestTrade": {"p": 106},
+            },
+            "OLD": {
+                "dailyBar": {"t": "2026-11-27T05:00:00Z", "o": 1, "c": 1, "vw": 1, "v": 1},
+                "prevDailyBar": {"t": "2026-11-26T05:00:00Z", "c": 1},
+            },
+        },
+        # today's in-progress bar (2026-11-30) must be dropped from history
+        "daily": {"bars": {"AAA": [*(_bar(d) for d in days), _bar("2026-11-30", 500)]}},
+        "news": {"AAA": {"score": 0, "why": ""}},
+        "assets": [{"symbol": "AAA", "tradable": True, "shortable": True, "easy_to_borrow": True}],
     }
-    args = ["--paper", "--no-journal", "--now", "2026-11-23T10:35:00-05:00"]
+    paths = {}
     for k, v in files.items():
-        p = tmp_path / f"{k}.json"
-        p.write_text(json.dumps(v))
-        args += [f"--{k}", str(p)]
-    assert cli.main(args) == 0
+        paths[k] = tmp_path / f"{k}.json"
+        paths[k].write_text(json.dumps(v))
+    argv = [
+        "--paper",
+        "--no-journal",
+        "--now",
+        "2026-11-30T16:00:00Z",
+        "--account",
+        str(paths["account"]),
+        "--positions",
+        str(paths["positions"]),
+        "--open-orders",
+        str(paths["open"]),
+        "--closed-orders",
+        str(paths["closed"]),
+        "--history",
+        str(paths["history"]),
+        "--snapshots",
+        str(paths["snapshots"]),
+        "--daily",
+        str(paths["daily"]),
+        "--news",
+        str(paths["news"]),
+        "--assets",
+        str(paths["assets"]),
+    ]
+    assert cli.main(argv) == 0
     out = json.loads(capsys.readouterr().out)
-    assert [a["symbol"] for a in out["actions"]] == ["AAPL"]
-    assert cli.main([a for a in args if a != "--paper"]) == 2  # paper confirmation required
-    live = tmp_path / "live.json"
-    live.write_text(json.dumps({"equity": "1", "cash": "1", "account_number": "123456"}))
-    i = args.index("--account")
-    assert cli.main(args[: i + 1] + [str(live)] + args[i + 2 :]) == 2
+    [a] = out["actions"]
+    assert a["action"] == "buy" and a["symbol"] == "AAA" and a["qty"] == 235
+    assert any(s["symbol"] == "OLD" and "stale" in s["reason"] for s in out["skipped"])
+
+    paths["news"].write_text(json.dumps({"AAA": {"score": 5}}))
+    assert cli.main(argv) == 2
+    assert "-2 to 2" in json.loads(capsys.readouterr().out)["error"]
+
+
+def test_cli_requires_paper_flag_and_rejects_live_account(tmp_path, capsys):
+    acct = tmp_path / "a.json"
+    acct.write_text(json.dumps({"account_number": "123", "equity": "1", "cash": "1"}))
+    assert cli.main(["--account", str(acct), "--no-journal"]) == 2
+    assert cli.main(["--account", str(acct), "--paper", "--no-journal"]) == 2
+    assert "paper" in capsys.readouterr().out
+
+
+def test_cli_parses_short_positions_and_nested_legs():
+    st, _ = cli.state_from_responses(
+        account={"account_number": "PA1", "equity": "100000", "cash": "1"},
+        positions=[{"symbol": "X", "qty": "-5", "avg_entry_price": "10", "current_price": "9"}],
+        open_orders=[
+            {
+                "id": "p",
+                "symbol": "X",
+                "side": "sell",
+                "type": "market",
+                "qty": "5",
+                "status": "filled",
+                "legs": [
+                    {
+                        "id": "l",
+                        "symbol": "X",
+                        "side": "buy",
+                        "type": "stop",
+                        "qty": "5",
+                        "stop_price": "11",
+                        "status": "held",
+                    }
+                ],
+            }
+        ],
+        closed_orders=[],
+        history=None,
+        now=NOW,
+        paper=True,
+    )
+    assert st.positions[0].side == "short" and st.positions[0].qty == 5
+    assert [o.id for o in st.open_orders] == ["l"]
+
+
+# ---------- Crypto: around the clock, long only, cash only ----------
+
+SAT_NIGHT = datetime(2026, 11, 28, 22, 0, tzinfo=ET)
+
+
+def hourly(n: int = 80, last: float | None = 110.0, step: float = 0.1) -> pd.DataFrame:
+    closes = [100 + step * i for i in range(n - 1)] + [last if last else 100 + step * (n - 1)]
+    return pd.DataFrame(
+        {
+            "open": closes,
+            "high": [c + 0.2 for c in closes],
+            "low": [c - 0.2 for c in closes],
+            "close": closes,
+        }
+    )
+
+
+def crypto_state(bars, **kw) -> State:
+    return state(now=SAT_NIGHT, cash=100_000.0, crypto_bars=bars, **kw)
+
+
+def test_crypto_breakout_buys_on_a_weekend_night_sized_by_caps():
+    plan = make_plan(crypto_state({"BTC/USD": hourly()}))
+    [a] = acts(plan, "crypto_buy")
+    assert a.symbol == "BTC/USD" and a.side == "buy" and a.time_in_force == "gtc"
+    assert a.qty == pytest.approx(90.90909, abs=1e-5)  # 10% of equity per coin
+    assert a.client_order_id == "atlasn-entry-BTCUSD-20261128-2200"
+    assert "new 24h high" in a.reason
+    assert plan.summary["new_trades_blocked"].startswith("outside entry hours")  # stocks only
+
+
+def test_crypto_needs_breakout_or_good_news_and_skips_bad_news():
+    bars = {"ETH/USD": hourly(last=None), "SOL/USD": hourly(last=None), "BTC/USD": hourly()}
+    news = {"SOLUSD": NewsScore(2, "ETF approved"), "BTC/USD": NewsScore(-1, "hack")}
+    plan = make_plan(crypto_state(bars, news=news))
+    assert [a.symbol for a in acts(plan, "crypto_buy")] == ["SOL/USD"]
+    assert "no 24h breakout" in reason(plan, "ETH/USD")
+    assert "bad news" in reason(plan, "BTC/USD")
+
+
+def test_crypto_respects_total_cap_and_daily_loss_cap():
+    bars = {p: hourly() for p in ("BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD")}
+    plan = make_plan(crypto_state(bars))
+    total = sum(a.qty * 110 for a in acts(plan, "crypto_buy"))
+    assert total <= 30_000 + 1 and len(acts(plan, "crypto_buy")) == 3
+    plan = make_plan(crypto_state(bars, last_equity=105_000.0))
+    assert acts(plan, "crypto_buy") == []
+    assert "today (cap 3%)" in reason(plan, "BTC/USD")
+
+
+def test_crypto_holdings_managed_and_ignored_by_stock_rules():
+    pos = [
+        Position("BTCUSD", 0.5, 100.0, 110.0, "long", "crypto"),  # no stop -> stop-limit
+        Position("ETHUSD", 2.0, 100.0, 95.0, "long", "crypto"),  # below EMA20 -> sell
+        Position("SOLUSD", 3.0, 100.0, 110.0, "long", "crypto"),  # bad news -> sell
+    ]
+    bars = {"BTC/USD": hourly(), "ETH/USD": hourly(last=95.0), "SOL/USD": hourly()}
+    sol_stop = OpenOrder("x", "SOL/USD", "sell", "stop_limit", 3.0, 97.0)
+    plan = make_plan(
+        crypto_state(
+            bars, positions=pos, open_orders=[sol_stop], news={"SOL/USD": NewsScore(-2, "exploit")}
+        )
+    )
+    kinds = [(a.action, a.symbol) for a in plan.actions]
+    assert ("stop", "BTCUSD") not in kinds  # stock rules leave crypto alone
+    [st] = acts(plan, "crypto_stop")
+    assert st.symbol == "BTC/USD" and st.type == "stop_limit" and st.qty == 0.5
+    assert st.limit_price < st.stop_price < 100
+    sells = {a.symbol: a for a in acts(plan, "crypto_sell")}
+    assert set(sells) == {"ETH/USD", "SOL/USD"} and "trend exit" in sells["ETH/USD"].reason
+    assert ("cancel", "SOL/USD") in kinds
+
+
+def test_cli_parses_crypto_positions_and_bars():
+    rows = [
+        {"t": f"2026-11-28T{h:02d}:00:00Z", "o": 1, "h": 2, "l": 0.5, "c": 1.5} for h in range(3)
+    ]
+    st, _ = cli.state_from_responses(
+        account={
+            "account_number": "PA1",
+            "equity": "100000",
+            "cash": "50000",
+            "non_marginable_buying_power": "40000",
+        },
+        positions=[
+            {
+                "symbol": "BTCUSD",
+                "qty": "0.25",
+                "avg_entry_price": "60000",
+                "current_price": "61000",
+                "asset_class": "crypto",
+            }
+        ],
+        open_orders=[],
+        closed_orders=[],
+        history=None,
+        now=SAT_NIGHT,
+        paper=True,
+        crypto_bars={"bars": {"BTC/USD": rows}},
+    )
+    assert st.positions[0].asset_class == "crypto" and st.cash == 40_000.0
+    assert list(st.crypto_bars["BTC/USD"]["close"]) == [1.5, 1.5, 1.5]

@@ -1,29 +1,42 @@
-"""Turn broker state + daily bars into a list of orders, applying the rules and risk limits.
+"""Turn broker state + market data + a news read into orders, under hard risk limits.
 
-Rules (trend-following swing, documented in docs/TRADING_BOT.md):
-  Regime   new buys only while SPY's last price is above its 200-day SMA.
-  Entry    last > SMA50 > SMA200, SMA50 rising over 10 sessions, 6-month return beats SPY's,
-           price within 25% of its high over the available history (≤252 sessions);
-           ranked by 6-month return minus SPY's; strongest first.
-  Exit     (a) protective GTC stop 8% below average entry, kept at the broker at all times;
-           (b) trend break: last < SMA50, evaluated only from 15:00 ET (end-of-day rule).
-  Risk     ≤10% of equity per new position, ≤10 positions, cash only (no margin), whole shares,
-           no shorting, ≤3 new buys per day, 7-day cooldown after a sell, no new buys while
-           equity is ≥10% below its peak, only universe symbols are bought.
+Strategy (news + price patterns, long and short; docs/TRADING_BOT.md):
+  Candidates  any symbol in the run's market data (most actives, movers, news tickers), that
+              trades >= $5 with enough average dollar volume.
+  Patterns    five price checks, mirrored for shorts:
+                above (below) today's VWAP; above (below) today's open;
+                up (down) >= 2% vs yesterday's close; above the 20-day high (below the 20-day low);
+                volume >= 1.5x a normal day at this time of day (counts for both sides).
+  Entry       news score >= +1 and >= 3 long checks incl. VWAP  -> buy
+              news score <= -1 and >= 3 short checks incl. VWAP -> short
+              no news: all 5 checks on one side                 -> momentum trade that way
+              ranked by 2*|news score| + checks.
+  Orders      market entry as a GTC bracket: stop 0.5x daily ATR away (clamped 1.5%-6%),
+              take-profit at 2x that distance. Size so the stop loses ~1% of equity.
+  Exits       bracket stop / target at the broker; news turns against a position -> close;
+              held >= 3 days and not up >= 1% -> close; a position with no stop gets one.
+  Risk        <=25% of equity per position, <=150% gross exposure, <=12 positions,
+              <=20 new trades/day, no entries before 9:45 / after 15:30 ET, no new trades
+              after a 3% daily loss or at a 15% drawdown from peak, PDT equity floor,
+              shorts only if Alpaca marks the stock shortable and easy to borrow.
 
-Today's bar is the in-progress session, so during market hours "last" is the latest price.
+The planner keeps no state: the broker is the source of truth. It never trades a non-paper account.
 """
 
 from __future__ import annotations
 
 import math
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-from app.services.market.indicators import sma
+from app.services.market.indicators import atr
 from app.services.trading.config import DEFAULT, BotConfig
+
+ET = ZoneInfo("America/New_York")
+STOP_TYPES = ("stop", "stop_limit", "trailing_stop")
 
 
 class PlannerError(ValueError):
@@ -33,10 +46,11 @@ class PlannerError(ValueError):
 @dataclass
 class Position:
     symbol: str
-    qty: float
+    qty: float  # absolute share count
     avg_entry_price: float
     current_price: float
-    side: str = "long"
+    side: str = "long"  # long | short
+    asset_class: str = "us_equity"  # us_equity | crypto
 
 
 @dataclass
@@ -46,7 +60,8 @@ class OpenOrder:
     side: str
     type: str
     qty: float | None
-    stop_price: float | None
+    stop_price: float | None = None
+    client_order_id: str | None = None
 
 
 @dataclass
@@ -54,31 +69,70 @@ class ClosedOrder:
     symbol: str
     side: str
     filled_at: datetime | None
+    client_order_id: str | None = None
+
+
+@dataclass
+class Snapshot:
+    """Today so far for one symbol (Alpaca stock snapshot)."""
+
+    last: float
+    prev_close: float
+    open: float
+    vwap: float
+    volume: float
+
+
+@dataclass
+class NewsScore:
+    score: int  # -2 very bad .. +2 very good, from reading the last hour's headlines
+    why: str = ""
+
+
+@dataclass
+class Asset:
+    tradable: bool = True
+    shortable: bool = False
+    easy_to_borrow: bool = False
 
 
 @dataclass
 class State:
-    now: datetime  # timezone-aware, any zone
+    now: datetime  # timezone-aware
     equity: float
-    cash: float
+    last_equity: float  # equity at the previous close
+    buying_power: float
     account_is_paper: bool
+    shorting_enabled: bool
     positions: list[Position]
     open_orders: list[OpenOrder]
     closed_orders: list[ClosedOrder]
-    equity_history: list[float]  # daily equity values (any length; peak taken from these + now)
-    closes: dict[str, pd.Series]  # symbol -> daily closes, oldest first (last = today so far)
+    equity_history: list[float]
+    snapshots: dict[str, Snapshot] = field(default_factory=dict)
+    daily: dict[str, pd.DataFrame] = field(default_factory=dict)  # prior sessions, OHLCV
+    news: dict[str, NewsScore] = field(default_factory=dict)
+    assets: dict[str, Asset] = field(default_factory=dict)
+    cash: float | None = None  # non-marginable buying power (crypto is cash-only)
+    crypto_bars: dict[str, pd.DataFrame] = field(default_factory=dict)  # "BTC/USD" -> hourly
 
 
 @dataclass
 class Action:
-    action: str  # buy | sell | stop | cancel
+    action: (
+        str  # buy | short | sell | cover | stop | cancel | crypto_buy | crypto_sell | crypto_stop
+    )
     symbol: str
     reason: str
-    qty: int | None = None
+    side: str | None = None  # broker side: buy | sell
+    qty: float | None = None  # whole shares for stocks; coins (6 decimals) for crypto
+    limit_price: float | None = None
+    type: str | None = None
+    time_in_force: str | None = None
+    order_class: str | None = None
     stop_price: float | None = None
+    stop_loss_stop_price: float | None = None
+    take_profit_limit_price: float | None = None
     order_id: str | None = None
-    type: str = "market"
-    time_in_force: str = "day"
     client_order_id: str | None = None
 
 
@@ -101,55 +155,123 @@ class Plan:
 @dataclass
 class Signal:
     symbol: str
+    direction: str  # long | short
+    points: int
+    checks: list[str]
+    news: int
     last: float
-    sma_fast: float | None
-    sma_slow: float | None
-    slope_ok: bool
-    rs: float | None  # 6m return minus benchmark 6m return, percentage points
-    below_high_pct: float | None
+    stop_dist: float
+    strength: float
+    why: str
 
 
-def _ret(close: pd.Series, n: int) -> float | None:
-    if len(close) <= n or close.iloc[-n - 1] <= 0:
-        return None
-    return (close.iloc[-1] / close.iloc[-n - 1] - 1) * 100
+def _cid(cfg: BotConfig, now_et: datetime, kind: str, symbol: str) -> str:
+    return f"{cfg.order_prefix}-{kind}-{symbol}-{now_et.strftime('%Y%m%d-%H%M')}"
 
 
-def signal_for(symbol: str, close: pd.Series, bench_ret: float | None, cfg: BotConfig) -> Signal:
-    f = sma(close, cfg.fast)
-    s = sma(close, cfg.slow)
-    last = float(close.iloc[-1])
-    fast_now = None if pd.isna(f.iloc[-1]) else float(f.iloc[-1])
-    slow_now = None if pd.isna(s.iloc[-1]) else float(s.iloc[-1])
-    slope_ok = (
-        len(f) > cfg.slope_lookback
-        and not pd.isna(f.iloc[-1 - cfg.slope_lookback])
-        and fast_now is not None
-        and fast_now > float(f.iloc[-1 - cfg.slope_lookback])
+def _hhmm(s: str) -> time:
+    h, m = s.split(":")
+    return time(int(h), int(m))
+
+
+def _session_fraction(now_et: datetime) -> float:
+    """Share of the 9:30-16:00 session elapsed (floored so early volume isn't over-weighted)."""
+    start = now_et.replace(hour=9, minute=30, second=0, microsecond=0)
+    frac = (now_et - start).total_seconds() / (6.5 * 3600)
+    return min(1.0, max(0.1, frac))
+
+
+def evaluate(
+    sym: str,
+    snap: Snapshot,
+    daily: pd.DataFrame,
+    news: NewsScore | None,
+    frac: float,
+    cfg: BotConfig,
+) -> tuple[Signal | None, str]:
+    """Return (signal, '') or (None, reason it was skipped)."""
+    if len(daily) < max(cfg.breakout_days, cfg.atr_days) + 1:
+        return None, "not enough daily history"
+    last = snap.last
+    if last < cfg.min_price:
+        return None, f"price under ${cfg.min_price:g}"
+    avg_vol = float(daily["volume"].tail(cfg.breakout_days).mean())
+    if avg_vol * last < cfg.min_avg_dollar_volume:
+        return None, "too thinly traded"
+    hi = float(daily["high"].tail(cfg.breakout_days).max())
+    lo = float(daily["low"].tail(cfg.breakout_days).min())
+    chg = (last / snap.prev_close - 1) * 100 if snap.prev_close > 0 else 0.0
+    rvol = snap.volume / (avg_vol * frac) if avg_vol > 0 else 0.0
+    vol_ok = rvol >= cfg.rel_volume
+    long_checks = [
+        n
+        for n, ok in (
+            ("above VWAP", last > snap.vwap),
+            ("above open", last > snap.open),
+            (f"up {chg:.1f}%", chg >= cfg.gap_pct),
+            (f"above {cfg.breakout_days}-day high", last > hi),
+            (f"volume {rvol:.1f}x", vol_ok),
+        )
+        if ok
+    ]
+    short_checks = [
+        n
+        for n, ok in (
+            ("below VWAP", last < snap.vwap),
+            ("below open", last < snap.open),
+            (f"down {abs(chg):.1f}%", chg <= -cfg.gap_pct),
+            (f"below {cfg.breakout_days}-day low", last < lo),
+            (f"volume {rvol:.1f}x", vol_ok),
+        )
+        if ok
+    ]
+    score = news.score if news else 0
+    direction = None
+    if score >= cfg.min_news_score:
+        if len(long_checks) >= cfg.news_pattern_points and last > snap.vwap:
+            direction = "long"
+        else:
+            return None, f"good news (+{score}) but price not confirming ({len(long_checks)}/5)"
+    elif score <= -cfg.min_news_score:
+        if len(short_checks) >= cfg.news_pattern_points and last < snap.vwap:
+            direction = "short"
+        else:
+            return None, f"bad news ({score}) but price not confirming ({len(short_checks)}/5)"
+    elif len(long_checks) >= cfg.momentum_pattern_points:
+        direction = "long"
+    elif len(short_checks) >= cfg.momentum_pattern_points:
+        direction = "short"
+    else:
+        return None, (
+            f"no news; momentum {max(len(long_checks), len(short_checks))}/5 "
+            f"(needs {cfg.momentum_pattern_points})"
+        )
+    checks = long_checks if direction == "long" else short_checks
+    a = atr(daily.reset_index(drop=True), cfg.atr_days).iloc[-1]
+    a = float(a) if not pd.isna(a) else last * cfg.max_stop_pct / 100
+    stop_dist = min(
+        max(cfg.stop_atr_mult * a, last * cfg.min_stop_pct / 100), last * cfg.max_stop_pct / 100
     )
-    r = _ret(close, cfg.rs_window)
-    rs = None if r is None or bench_ret is None else r - bench_ret
-    high = float(close.iloc[-252:].max())
-    below = (1 - last / high) * 100 if high > 0 else None
-    return Signal(symbol, last, fast_now, slow_now, slope_ok, rs, below)
-
-
-def entry_ok(sig: Signal, cfg: BotConfig) -> tuple[bool, str]:
-    if sig.sma_fast is None or sig.sma_slow is None or sig.rs is None:
-        return False, "not enough history"
-    if not (sig.last > sig.sma_fast > sig.sma_slow):
-        return False, "not in uptrend (needs price > SMA50 > SMA200)"
-    if not sig.slope_ok:
-        return False, "SMA50 not rising"
-    if sig.rs <= 0:
-        return False, f"6-month return trails {cfg.benchmark} by {abs(sig.rs):.1f} pts"
-    if sig.below_high_pct is not None and sig.below_high_pct > cfg.max_below_high_pct:
-        return False, f"{sig.below_high_pct:.1f}% below its high"
-    return True, "ok"
-
-
-def _cid(cfg: BotConfig, now: datetime, kind: str, symbol: str) -> str:
-    return f"{cfg.order_prefix}-{kind}-{symbol}-{now.strftime('%Y%m%d-%H')}"
+    news_txt = (
+        f"news {score:+d}" + (f" ({news.why})" if news and news.why else "")
+        if score
+        else "momentum"
+    )
+    why = f"{news_txt}; " + ", ".join(checks)
+    return (
+        Signal(
+            sym,
+            direction,
+            len(checks),
+            checks,
+            score,
+            last,
+            stop_dist,
+            2 * abs(score) + len(checks),
+            why,
+        ),
+        "",
+    )
 
 
 def make_plan(st: State, cfg: BotConfig = DEFAULT) -> Plan:
@@ -157,180 +279,247 @@ def make_plan(st: State, cfg: BotConfig = DEFAULT) -> Plan:
         raise PlannerError("Refusing to plan: account is not a paper account.")
     if st.now.tzinfo is None:
         raise PlannerError("now must be timezone-aware")
-    if cfg.allow_short or cfg.allow_margin:
-        raise PlannerError("Shorting and margin are disabled by the owner's risk settings.")
-    bench = st.closes.get(cfg.benchmark)
-    if bench is None or len(bench) < cfg.slow:
-        raise PlannerError(f"Need at least {cfg.slow} daily closes for {cfg.benchmark}.")
 
-    from zoneinfo import ZoneInfo
-
-    now_et = st.now.astimezone(ZoneInfo("America/New_York"))
+    now_et = st.now.astimezone(ET)
     plan = Plan()
     held = {p.symbol: p for p in st.positions}
-    for p in st.positions:
-        if p.side != "long" or p.qty <= 0:
-            raise PlannerError(
-                f"Unexpected non-long position in {p.symbol}; not trading until reviewed."
-            )
-
-    bench_ret = _ret(bench, cfg.rs_window)
-    bench_sma = sma(bench, cfg.slow).iloc[-1]
-    regime_on = float(bench.iloc[-1]) > float(bench_sma)
-
-    peak = max([st.equity, *st.equity_history]) if st.equity_history else st.equity
-    drawdown = (1 - st.equity / peak) * 100 if peak > 0 else 0.0
-    paused = drawdown >= cfg.drawdown_pause_pct
-    close_window = now_et.hour >= cfg.trend_exit_hour_et
-
-    stops = {}
+    by_symbol: dict[str, list[OpenOrder]] = {}
     for o in st.open_orders:
-        if o.side == "sell" and o.type in ("stop", "stop_limit", "trailing_stop"):
-            stops.setdefault(o.symbol, []).append(o)
-    pending_buys = {o.symbol for o in st.open_orders if o.side == "buy"}
-    pending_sells = {o.symbol for o in st.open_orders if o.side == "sell" and o.type == "market"}
+        by_symbol.setdefault(o.symbol, []).append(o)
 
-    # 1) Exits: trend breaks (end-of-day only)
+    def is_entry(cid: str | None) -> bool:
+        return bool(cid) and cid.startswith(f"{cfg.order_prefix}-entry-")
+
+    pending_entries = {o.symbol for o in st.open_orders if is_entry(o.client_order_id)}
+
+    def close(p: Position, reason: str) -> None:
+        for o in by_symbol.get(p.symbol, []):
+            plan.actions.append(
+                Action("cancel", p.symbol, "free shares held by open orders", order_id=o.id)
+            )
+        long = p.side == "long"
+        plan.actions.append(
+            Action(
+                "sell" if long else "cover",
+                p.symbol,
+                reason,
+                side="sell" if long else "buy",
+                qty=int(abs(p.qty)),
+                type="market",
+                time_in_force="day",
+                client_order_id=_cid(cfg, now_et, "exit", p.symbol),
+            )
+        )
+
+    # Latest entry fill per symbol (to age positions)
+    entered: dict[str, datetime] = {}
+    for c in st.closed_orders:
+        if is_entry(c.client_order_id) and c.filled_at:
+            if c.symbol not in entered or c.filled_at > entered[c.symbol]:
+                entered[c.symbol] = c.filled_at
+
+    # 1) Manage open positions
     exiting: set[str] = set()
     for sym, p in held.items():
-        close = st.closes.get(sym)
-        if close is None or len(close) < cfg.fast:
-            plan.skipped.append({"symbol": sym, "reason": "held, but no bars to evaluate the exit"})
+        if p.asset_class == "crypto":
+            continue  # managed in the crypto section
+        long = p.side == "long"
+        if int(abs(p.qty)) < 1:
+            plan.skipped.append({"symbol": sym, "reason": "fractional position; left alone"})
             continue
-        f = sma(close, cfg.fast).iloc[-1]
-        last = float(close.iloc[-1])
-        if close_window and last < float(f) and sym not in pending_sells:
-            for o in stops.get(sym, []):
-                plan.actions.append(
-                    Action(
-                        "cancel", sym, "free shares held by the stop before selling", order_id=o.id
-                    )
-                )
-            qty = int(p.qty)
-            plan.actions.append(
-                Action(
-                    "sell",
-                    sym,
-                    f"trend break: {last:.2f} < SMA{cfg.fast} {float(f):.2f}",
-                    qty=qty,
-                    client_order_id=_cid(cfg, now_et, "exit", sym),
-                )
+        n = st.news.get(sym)
+        if n and (
+            (long and n.score <= -cfg.min_news_score)
+            or (not long and n.score >= cfg.min_news_score)
+        ):
+            close(
+                p, f"news turned against the {p.side} ({n.score:+d}{': ' + n.why if n.why else ''})"
             )
             exiting.add(sym)
-
-    # 2) Protective stops: every remaining position has exactly one stop for its full size
-    for sym, p in held.items():
-        if sym in exiting or sym in pending_sells:
             continue
-        qty = int(p.qty)
-        want = round(p.avg_entry_price * (1 - cfg.stop_loss_pct / 100), 2)
-        existing = stops.get(sym, [])
-        good = [o for o in existing if o.qty is not None and int(o.qty) == qty]
-        if len(existing) == 1 and good:
+        gain = (p.current_price / p.avg_entry_price - 1) * 100 if p.avg_entry_price > 0 else 0.0
+        gain = gain if long else -gain
+        since = entered.get(sym)
+        if (
+            since is not None
+            and st.now - since >= timedelta(days=cfg.max_hold_days)
+            and gain < cfg.stale_min_gain_pct
+        ):
+            close(p, f"held {cfg.max_hold_days}+ days and only {gain:+.1f}%")
+            exiting.add(sym)
             continue
-        for o in existing:
-            plan.actions.append(
-                Action("cancel", sym, "stop size does not match position", order_id=o.id)
-            )
+        protect_side = "sell" if long else "buy"
+        stops = [
+            o for o in by_symbol.get(sym, []) if o.side == protect_side and o.type in STOP_TYPES
+        ]
+        if stops:
+            continue
+        stop = p.avg_entry_price * (
+            1 - cfg.fallback_stop_pct / 100 if long else 1 + cfg.fallback_stop_pct / 100
+        )
+        breached = p.current_price <= stop if long else p.current_price >= stop
+        if breached:
+            close(p, f"no stop and already past the {cfg.fallback_stop_pct:g}% stop level")
+            exiting.add(sym)
+            continue
+        for o in by_symbol.get(sym, []):
+            plan.actions.append(Action("cancel", sym, "replace with a full stop", order_id=o.id))
         plan.actions.append(
             Action(
                 "stop",
                 sym,
-                f"protective stop {cfg.stop_loss_pct:g}% below entry {p.avg_entry_price:.2f}",
-                qty=qty,
-                stop_price=want,
+                f"position had no stop: {cfg.fallback_stop_pct:g}% from entry",
+                side=protect_side,
+                qty=int(abs(p.qty)),
                 type="stop",
                 time_in_force="gtc",
+                stop_price=round(stop, 2),
                 client_order_id=_cid(cfg, now_et, "stop", sym),
             )
         )
 
-    # 3) Entries
+    # 2) Guardrails for new trades
+    peak = max([st.equity, *st.equity_history])
+    drawdown = (1 - st.equity / peak) * 100 if peak > 0 else 0.0
+    day_pnl = (st.equity / st.last_equity - 1) * 100 if st.last_equity > 0 else 0.0
+    gross = sum(abs(p.qty) * p.current_price for s, p in held.items() if s not in exiting)
     today = now_et.date()
-    bought_today = sum(
-        1
-        for c in st.closed_orders
-        if c.side == "buy" and c.filled_at and c.filled_at.astimezone(now_et.tzinfo).date() == today
-    ) + len(pending_buys)
-    recent_sells = {
+    entries_today = len(
+        {
+            c.client_order_id
+            for c in st.closed_orders
+            if is_entry(c.client_order_id)
+            and c.filled_at
+            and c.filled_at.astimezone(ET).date() == today
+        }
+    ) + len(pending_entries)
+    open_slots = cfg.max_positions - (len(held) - len(exiting)) - len(pending_entries)
+    recent = {
         c.symbol
         for c in st.closed_orders
-        if c.side == "sell"
-        and c.filled_at
-        and st.now - c.filled_at < timedelta(days=cfg.cooldown_days)
+        if c.filled_at and st.now - c.filled_at < timedelta(minutes=cfg.cooldown_minutes)
     }
-    slots = cfg.max_positions - (len(held) - len(exiting)) - len(pending_buys)
-    cash = st.cash
-    budget_per = st.equity * cfg.max_position_pct / 100
+    t = now_et.time()
+    risk_block = None
+    if day_pnl <= -cfg.daily_loss_cap_pct:
+        risk_block = f"down {abs(day_pnl):.1f}% today (cap {cfg.daily_loss_cap_pct:g}%)"
+    elif drawdown >= cfg.drawdown_pause_pct:
+        risk_block = (
+            f"{drawdown:.1f}% below peak (pause at {cfg.drawdown_pause_pct:g}%): needs review"
+        )
+    blocked = risk_block
+    if not blocked and st.equity < cfg.min_equity_for_day_trading:
+        blocked = f"equity under ${cfg.min_equity_for_day_trading:,.0f} (day-trading rule)"
+    if not blocked and not (_hhmm(cfg.first_entry_et) <= t <= _hhmm(cfg.last_entry_et)):
+        blocked = f"outside entry hours {cfg.first_entry_et}-{cfg.last_entry_et} ET"
 
-    candidates: list[Signal] = []
-    for sym in cfg.universe:
-        close = st.closes.get(sym)
-        if close is None or len(close) == 0:
-            plan.skipped.append({"symbol": sym, "reason": "no price data"})
+    # 3) Signals
+    frac = _session_fraction(now_et)
+    signals: list[Signal] = []
+    for sym, snap in st.snapshots.items():
+        if sym in held or sym in pending_entries:
             continue
-        if sym in held or sym in pending_buys:
+        asset = st.assets.get(sym)
+        if asset is not None and not asset.tradable:
+            plan.skipped.append({"symbol": sym, "reason": "not tradable at Alpaca"})
             continue
-        sig = signal_for(sym, close, bench_ret, cfg)
-        ok, why = entry_ok(sig, cfg)
-        if not ok:
+        daily = st.daily.get(sym)
+        if daily is None:
+            plan.skipped.append({"symbol": sym, "reason": "no daily bars"})
+            continue
+        sig, why = evaluate(sym, snap, daily, st.news.get(sym), frac, cfg)
+        if sig is None:
             plan.skipped.append({"symbol": sym, "reason": why})
             continue
-        if sym in recent_sells:
+        if sig.direction == "short":
+            if not (cfg.allow_short and st.shorting_enabled):
+                plan.skipped.append({"symbol": sym, "reason": "short signal, shorting is off"})
+                continue
+            if asset is None or not (asset.shortable and asset.easy_to_borrow):
+                plan.skipped.append(
+                    {"symbol": sym, "reason": "short signal, but not easy to borrow (or unknown)"}
+                )
+                continue
+        if sym in recent:
             plan.skipped.append(
-                {"symbol": sym, "reason": f"cooldown ({cfg.cooldown_days} days after a sell)"}
+                {"symbol": sym, "reason": f"traded in the last {cfg.cooldown_minutes} min"}
             )
             continue
-        candidates.append(sig)
-    candidates.sort(key=lambda s: s.rs or 0, reverse=True)
+        signals.append(sig)
+    signals.sort(key=lambda s: s.strength, reverse=True)
 
-    blocked = None
-    if not regime_on:
-        blocked = f"{cfg.benchmark} below its {cfg.slow}-day average: no new buys"
-    elif paused:
-        blocked = f"drawdown {drawdown:.1f}% ≥ {cfg.drawdown_pause_pct:g}%: new buys paused"
-    for sig in candidates:
-        reason = None
-        if blocked:
-            reason = blocked
-        elif slots <= 0:
+    # 4) Entries
+    bp = st.buying_power
+    for sig in signals:
+        reason = blocked
+        if not reason and open_slots <= 0:
             reason = f"max {cfg.max_positions} positions"
-        elif bought_today >= cfg.max_new_buys_per_day:
-            reason = f"max {cfg.max_new_buys_per_day} new buys per day"
+        if not reason and entries_today >= cfg.max_new_trades_per_day:
+            reason = f"max {cfg.max_new_trades_per_day} new trades today"
+        qty = 0
+        if not reason:
+            room = st.equity * cfg.max_gross_pct / 100 - gross
+            qty = min(
+                math.floor(st.equity * cfg.risk_per_trade_pct / 100 / sig.stop_dist),
+                math.floor(st.equity * cfg.max_position_pct / 100 / sig.last),
+                math.floor(max(room, 0) / sig.last),
+                math.floor(max(bp, 0) * 0.95 / sig.last),
+            )
+            if qty < 1:
+                reason = "no room left (exposure or buying power)"
         if reason:
-            plan.skipped.append({"symbol": sig.symbol, "reason": f"signal OK, but {reason}"})
-            continue
-        qty = math.floor(min(budget_per, cash) / sig.last) if sig.last > 0 else 0
-        if qty < 1:
             plan.skipped.append(
-                {"symbol": sig.symbol, "reason": "signal OK, but not enough cash for 1 share"}
+                {"symbol": sig.symbol, "reason": f"{sig.direction} signal OK, but {reason}"}
             )
             continue
-        cash -= qty * sig.last
-        slots -= 1
-        bought_today += 1
+        long = sig.direction == "long"
+        stop = sig.last - sig.stop_dist if long else sig.last + sig.stop_dist
+        target = (
+            sig.last + cfg.target_r * sig.stop_dist
+            if long
+            else sig.last - cfg.target_r * sig.stop_dist
+        )
+        value = qty * sig.last
         plan.actions.append(
             Action(
-                "buy",
+                "buy" if long else "short",
                 sig.symbol,
-                f"uptrend; 6m return beats {cfg.benchmark} by {sig.rs:.1f} pts; "
-                f"{sig.below_high_pct:.1f}% below high; ~${qty * sig.last:,.0f}",
+                f"{sig.why}; ~${value:,.0f}, risk ~${qty * sig.stop_dist:,.0f}",
+                side="buy" if long else "sell",
                 qty=qty,
-                client_order_id=_cid(cfg, now_et, "buy", sig.symbol),
+                type="market",
+                time_in_force="gtc",
+                order_class="bracket",
+                stop_loss_stop_price=round(stop, 2),
+                take_profit_limit_price=round(target, 2),
+                client_order_id=_cid(cfg, now_et, "entry", sig.symbol),
             )
         )
+        gross += value
+        bp -= value
+        open_slots -= 1
+        entries_today += 1
+
+    # 5) Crypto, around the clock (long only, cash only)
+    from app.services.trading.crypto import plan_crypto
+
+    room = {"gross": gross, "open_slots": open_slots, "entries_today": entries_today}
+    crypto_summary = plan_crypto(st, plan, cfg, now_et, risk_block, room, recent)
+    gross, entries_today = room["gross"], room["entries_today"]
 
     plan.summary = {
         "now_et": now_et.isoformat(timespec="minutes"),
         "equity": round(st.equity, 2),
-        "cash": round(st.cash, 2),
-        "positions": len(held),
-        "regime": "on" if regime_on else "off",
-        f"{cfg.benchmark.lower()}_last": round(float(bench.iloc[-1]), 2),
-        f"{cfg.benchmark.lower()}_sma{cfg.slow}": round(float(bench_sma), 2),
+        "day_pnl_pct": round(day_pnl, 2),
         "drawdown_pct": round(drawdown, 2),
-        "buys_paused": paused,
-        "trend_exits_evaluated": close_window,
-        "candidates": [s.symbol for s in candidates],
+        "gross_exposure_pct": round(gross / st.equity * 100, 1) if st.equity > 0 else 0.0,
+        "positions": len(held),
+        "longs": sum(1 for p in held.values() if p.side == "long"),
+        "shorts": sum(1 for p in held.values() if p.side == "short"),
+        "entries_today": entries_today,
+        "new_trades_blocked": blocked,
+        "candidates_scanned": len(st.snapshots),
+        "signals": [f"{s.direction} {s.symbol}" for s in signals],
+        "crypto": crypto_summary,
     }
     return plan

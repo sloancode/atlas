@@ -2,11 +2,13 @@
 
 Paper trading bot dashboard and market research, for one person on their own computer.
 
-- **Trading bot**: an autonomous trend-following swing bot that trades an Alpaca **paper** account
-  (simulated money). Fixed rules and risk limits in code decide every order
+- **Trading bot**: an autonomous news + price-pattern bot that trades an Alpaca **paper** account
+  (simulated money): stocks long and short during market hours, crypto around the clock. Fixed
+  rules and risk limits in code decide every order
   ([docs/TRADING_BOT.md](docs/TRADING_BOT.md)).
 - **Bot dashboard** (home page): live account, positions with their protective stops, open and
-  recent orders, the market filter, and a dry run of what the bot would do right now and why.
+  recent orders, the guardrails (daily loss cap, drawdown, exposure), and a dry run of the
+  position checks.
 - **Research**: US stock/ETF research pages, a rules-based scanner and watchlists.
 
 The website is read-only: it never places, changes or cancels orders. Orders are placed only by

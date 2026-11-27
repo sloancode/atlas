@@ -52,10 +52,7 @@ def _pick(row: dict, keys: tuple[str, ...]) -> dict:
 
 
 def rules() -> dict:
-    cfg = asdict(DEFAULT)
-    cfg.pop("extra", None)
-    cfg["universe"] = list(DEFAULT.universe)
-    return cfg
+    return asdict(DEFAULT)
 
 
 @router.get("/rules")
@@ -82,8 +79,6 @@ async def overview(settings: Settings = Depends(get_settings)) -> dict:
             client.orders("closed", days=30, limit=200),
             client.portfolio_history("3M"),
         )
-        held = [p["symbol"] for p in positions if p["symbol"] not in DEFAULT.universe]
-        bars = await client.daily_bars([*DEFAULT.universe, *held])
     except ProviderError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from None
     finally:
@@ -93,13 +88,14 @@ async def overview(settings: Settings = Depends(get_settings)) -> dict:
     plan: dict | None = None
     plan_error: str | None = None
     try:
-        state = state_from_responses(
+        # No market scan or news read here: this dry run checks open positions (stops, stale
+        # trades) and the guardrails. New-trade signals come from the scheduled bot's runs.
+        state, _ = state_from_responses(
             account=account,
             positions=positions,
             open_orders=open_orders,
             closed_orders=closed,
             history=history,
-            bars={"bars": bars},
             now=now,
             paper=True,
         )
@@ -128,7 +124,8 @@ async def overview(settings: Settings = Depends(get_settings)) -> dict:
         "plan": plan,
         "plan_error": plan_error,
         "plan_note": (
-            "Dry run on live data: what the bot would do if it ran now. "
+            "Dry run on live data: position checks and guardrails if the bot ran now. "
+            "New trades come from the scheduled run's market scan and news read. "
             "No orders are placed from this page."
         ),
         "rules": rules(),

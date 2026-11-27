@@ -91,7 +91,7 @@ function PositionsTable({ positions, stops }: { positions: BotPosition[]; stops:
 export default async function BotDashboard() {
   const res = await getBotOverview();
   const header = (
-    <PageHeader code="BOT" title="Trading bot" subtitle="Trend-following swing bot on an Alpaca paper account (simulated money). Fixed rules in code decide every order; this page only shows what it is doing." />
+    <PageHeader code="BOT" title="Trading bot" subtitle="News + price-pattern bot on an Alpaca paper account (simulated money): stocks long and short during market hours, crypto around the clock. Code limits decide every order size; this page only shows what it is doing." />
   );
   if (!res.ok) {
     return (<>{header}<EmptyState title="Could not load the paper account">{res.error}</EmptyState></>);
@@ -119,7 +119,7 @@ export default async function BotDashboard() {
   const start = d.equity_history[0]?.equity ?? null;
   const total = eq !== null && start ? ((eq - start) / start) * 100 : null;
   const stops = new Map<string, string | null>();
-  d.open_orders.filter((o) => o.side === "sell" && o.type.includes("stop")).forEach((o) => stops.set(o.symbol, o.stop_price));
+  d.open_orders.filter((o) => o.type.includes("stop")).forEach((o) => stops.set(o.symbol.replace("/", ""), o.stop_price));
   const s = d.plan?.summary;
 
   return (
@@ -129,19 +129,21 @@ export default async function BotDashboard() {
         <Tile label="Equity (paper)" value={money(eq)} tone="text-sim" note={`Retrieved ${fmtDateTime(d.retrieved_at)}`} />
         <Tile label="Today" value={day === null ? null : money(day)} tone={day && day < 0 ? "text-neg" : day ? "text-pos" : ""} note="vs. previous close" />
         <Tile label="Since start" value={total === null ? null : `${total >= 0 ? "+" : ""}${total.toFixed(2)}%`} tone={total && total < 0 ? "text-neg" : total ? "text-pos" : ""} note={start ? `from ${money(start)}` : undefined} />
-        <Tile label="Cash" value={money(cash)} note="Bot buys with cash only" />
+        <Tile label="Cash" value={money(cash)} note={s ? `Invested ${num(s.gross_exposure_pct, 0)}% of equity (max ${d.rules.max_gross_pct}%)` : undefined} />
         <Tile label="Market" value={d.clock.is_open ? "Open" : "Closed"} tone={d.clock.is_open ? "text-pos" : "text-dim"} note={d.clock.is_open ? `Closes ${fmtDateTime(d.clock.next_close)}` : `Opens ${fmtDateTime(d.clock.next_open)}`} />
       </div>
 
       {s && (
-        <Panel title="Market filter" className="mb-4">
+        <Panel title="Guardrails" className="mb-4">
           <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-[12px]">
-            <span className={`rounded-sm border px-1.5 py-[1px] text-[10px] font-medium uppercase tracking-wider ${s.regime === "on" ? "border-pos/50 bg-pos/10 text-pos" : "border-neg/50 bg-neg/10 text-neg"}`}>
-              {s.regime === "on" ? "Buying allowed" : "No new buys"}
+            <span className={`rounded-sm border px-1.5 py-[1px] text-[10px] font-medium uppercase tracking-wider ${s.new_trades_blocked ? "border-neg/50 bg-neg/10 text-neg" : "border-pos/50 bg-pos/10 text-pos"}`}>
+              {s.new_trades_blocked ? "No new stock trades" : "Stock trading allowed"}
             </span>
-            <span className="text-dim">SPY <span className="num text-text">{money(s.spy_last)}</span> vs 200-day average <span className="num text-text">{money(s.spy_sma200)}</span></span>
-            <span className="text-dim">Drawdown from peak <span className="num text-text">{num(s.drawdown_pct, 2)}%</span>{s.buys_paused && <span className="text-neg"> (buys paused)</span>}</span>
-            <span className="text-dim">Passing the stock rules: <span className="text-text">{s.candidates.length ? s.candidates.join(", ") : "none"}</span></span>
+            {s.new_trades_blocked && <span className="text-dim">{s.new_trades_blocked}</span>}
+            <span className="text-dim">Today <span className="num text-text">{num(s.day_pnl_pct, 2)}%</span> (stops new trades at −{d.rules.daily_loss_cap_pct}%)</span>
+            <span className="text-dim">From peak <span className="num text-text">−{num(s.drawdown_pct, 2)}%</span> (pauses at −{d.rules.drawdown_pause_pct}%)</span>
+            <span className="text-dim">{s.longs} long · {s.shorts} short · crypto {money(s.crypto?.value ?? 0)}</span>
+            <span className="text-dim">New trades today <span className="num text-text">{s.entries_today}</span> / {d.rules.max_new_trades_per_day}</span>
           </div>
         </Panel>
       )}
@@ -155,14 +157,14 @@ export default async function BotDashboard() {
             <ul className="space-y-1.5 text-[12px]">
               {d.plan.actions.map((a, i) => (
                 <li key={i} className="flex gap-2">
-                  <span className={`num w-12 shrink-0 uppercase ${a.action === "buy" ? "text-pos" : a.action === "sell" ? "text-neg" : "text-info"}`}>{a.action}</span>
-                  <span className="w-12 shrink-0 font-medium">{a.symbol}</span>
-                  <span className="text-dim">{a.qty ? `${a.qty} sh · ` : ""}{a.stop_price ? `stop ${money(a.stop_price)} · ` : ""}{a.reason}</span>
+                  <span className={`num w-20 shrink-0 uppercase ${a.action.endsWith("buy") ? "text-pos" : a.action.endsWith("sell") || a.action === "short" ? "text-neg" : "text-info"}`}>{a.action.replace("_", " ")}</span>
+                  <span className="w-16 shrink-0 font-medium">{a.symbol}</span>
+                  <span className="text-dim">{a.qty ? `${a.qty} · ` : ""}{a.stop_price ? `stop ${money(a.stop_price)} · ` : ""}{a.reason}</span>
                 </li>
               ))}
             </ul>
           ) : (
-            <div className="text-[12px] text-dim">No orders. {s?.regime === "off" ? "SPY is below its 200-day average, so the rules allow no new buys." : "Nothing meets the rules right now."}</div>
+            <div className="text-[12px] text-dim">No changes needed: every position has its stop and nothing is due to close.</div>
           )}
           <p className="mt-3 text-[11px] text-faint">{d.plan_note}</p>
         </Panel>
