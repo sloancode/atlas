@@ -1,0 +1,49 @@
+# Automatic PAPER trading runner: every 5 minutes, around the clock.
+# Needs two repository secrets: ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY (Alpaca PAPER keys).
+# To pause the bot: GitHub -> Actions -> "Paper trading bot" -> "..." -> Disable workflow.
+name: Paper trading bot
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"  # GitHub may start scheduled runs a few minutes late
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Plan only, place no orders"
+        type: boolean
+        default: false
+
+# Never let two runs trade at the same time; a run that is still going finishes first.
+concurrency:
+  group: paper-trading-bot
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Install
+        run: uv sync --frozen --no-dev
+      - name: Run the bot (paper account)
+        env:
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+        run: |
+          if [ -z "$ALPACA_API_KEY_ID" ]; then
+            echo "No Alpaca keys in the repository secrets yet; nothing to do."
+            exit 0
+          fi
+          uv run --no-dev python -m app.services.trading.engine --paper ${{ inputs.dry_run && '--dry-run' || '' }}

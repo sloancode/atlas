@@ -61,7 +61,7 @@ class BotConfig:
     crypto_min_stop_pct: float = 2.0  # ... at least 2% ...
     crypto_max_stop_pct: float = 8.0  # ... at most 8%
     crypto_cooldown_minutes: int = 60
-    crypto_min_order_usd: float = 10.0
+    crypto_min_order_usd: float = 500.0  # skip crumbs left under the caps
 
 
 DEFAULT = BotConfig()

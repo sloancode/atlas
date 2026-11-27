@@ -93,11 +93,21 @@ def plan_crypto(
             sell_all(pair, p, f"trend exit: {last:,.4g} < EMA{cfg.crypto_ema_fast} {fast:,.4g}")
             exiting.add(pair)
             continue
+        # Take-profit: Alpaca crypto has no bracket/OCO orders, so the planner enforces the
+        # target (2x the stop distance) itself, using the position's live price.
+        price = p.current_price
+        dist = _stop_dist(b, p.avg_entry_price, cfg)
+        target = p.avg_entry_price + cfg.target_r * dist
+        if price >= target:
+            sell_all(pair, p, f"take profit: {price:,.6g} reached target {target:,.6g}")
+            exiting.add(pair)
+            continue
         if any(o.side == "sell" and o.type in ("stop", "stop_limit") for o in orders.get(pair, [])):
             continue
-        stop = p.avg_entry_price - _stop_dist(b, p.avg_entry_price, cfg)
-        if last <= stop:
-            sell_all(pair, p, "below its stop level and had no stop order")
+        stop = p.avg_entry_price - dist
+        if price <= stop:
+            # A sell stop above the market would trigger at once; sell outright instead.
+            sell_all(pair, p, f"already below its stop level {stop:,.6g} and had no stop order")
             exiting.add(pair)
             continue
         for o in orders.get(pair, []):
