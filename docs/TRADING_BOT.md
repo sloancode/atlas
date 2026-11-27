@@ -14,11 +14,14 @@ pass, how big they are, and where the stops go. Claude places exactly those orde
 
 ## Schedule
 
+One scheduled run every hour at :45 (ET), every day (scheduled tasks can run at most hourly):
+
 | When (ET) | What runs |
 |---|---|
-| Mon–Fri 9:00–15:45, every 15 minutes | stocks (from 9:45, when the market is open) + crypto |
-| Mon–Fri other hours, hourly | crypto only |
-| Sat–Sun, hourly | crypto only |
+| Mon–Fri 9:45–15:45 | stocks + crypto (7 stock runs a day) |
+| all other hours, including weekends | crypto only |
+
+Each run starts a new thread in the Claude project and reports there.
 
 Stocks trade only during regular hours (9:30–16:00). Outside them Alpaca accepts only limit
 orders, stops and brackets don't protect positions, and prices are thin, so the bot holds
