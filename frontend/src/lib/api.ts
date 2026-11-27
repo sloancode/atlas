@@ -153,23 +153,33 @@ export type BotOrder = {
   time_in_force: string | null; submitted_at: string | null; filled_at: string | null;
 };
 export type PlanAction = {
-  action: "buy" | "sell" | "stop" | "cancel"; symbol: string; reason: string; qty?: number;
-  stop_price?: number; order_id?: string; type: string; time_in_force: string; client_order_id?: string;
+  action: "buy" | "short" | "sell" | "cover" | "stop" | "cancel" | "crypto_buy" | "crypto_sell" | "crypto_stop";
+  symbol: string; reason: string; side?: string; qty?: number; type?: string; time_in_force?: string;
+  order_class?: string; stop_price?: number; limit_price?: number; stop_loss_stop_price?: number;
+  take_profit_limit_price?: number; order_id?: string; client_order_id?: string;
 };
 export type BotPlan = {
   actions: PlanAction[];
   skipped: { symbol: string; reason: string }[];
   summary: {
-    now_et: string; equity: number; cash: number; positions: number; regime: "on" | "off";
-    spy_last: number; spy_sma200: number; drawdown_pct: number; buys_paused: boolean;
-    trend_exits_evaluated: boolean; candidates: string[];
+    now_et: string; equity: number; day_pnl_pct: number; drawdown_pct: number; gross_exposure_pct: number;
+    positions: number; longs: number; shorts: number; entries_today: number; new_trades_blocked: string | null;
+    candidates_scanned: number; signals: string[];
+    crypto: { holdings: string[]; value: number; signals: string[]; blocked: string | null };
   };
 };
 export type BotRules = {
-  universe: string[]; benchmark: string; max_position_pct: number; max_positions: number; stop_loss_pct: number;
-  drawdown_pause_pct: number; max_new_buys_per_day: number; cooldown_days: number; allow_short: boolean;
-  allow_margin: boolean; fast: number; slow: number; slope_lookback: number; rs_window: number;
-  max_below_high_pct: number; trend_exit_hour_et: number; order_prefix: string;
+  risk_per_trade_pct: number; max_position_pct: number; max_gross_pct: number; max_positions: number;
+  max_new_trades_per_day: number; daily_loss_cap_pct: number; drawdown_pause_pct: number;
+  min_equity_for_day_trading: number; allow_short: boolean; min_price: number; min_avg_dollar_volume: number;
+  min_news_score: number; news_pattern_points: number; momentum_pattern_points: number; gap_pct: number;
+  rel_volume: number; breakout_days: number; atr_days: number; stop_atr_mult: number; min_stop_pct: number;
+  max_stop_pct: number; target_r: number; fallback_stop_pct: number; max_hold_days: number;
+  stale_min_gain_pct: number; cooldown_minutes: number; first_entry_et: string; last_entry_et: string;
+  order_prefix: string; crypto_pairs: string[]; crypto_max_position_pct: number; crypto_max_total_pct: number;
+  crypto_ema_fast: number; crypto_ema_slow: number; crypto_breakout_bars: number; crypto_max_24h_gain_pct: number;
+  crypto_stop_atr_mult: number; crypto_min_stop_pct: number; crypto_max_stop_pct: number;
+  crypto_cooldown_minutes: number; crypto_min_order_usd: number;
 };
 export type BotOverview =
   | { configured: false; message: string; rules: BotRules }
