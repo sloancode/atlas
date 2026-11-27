@@ -3,7 +3,8 @@
 Paper trading bot dashboard and market research, for one person on their own computer.
 
 - **Trading bot**: an autonomous news + price-pattern bot that trades an Alpaca **paper** account
-  (simulated money): stocks long and short during market hours, crypto around the clock. Fixed
+  (simulated money): stocks long and short during market hours, crypto around the clock,
+  checked every 5 minutes by a GitHub Actions runner. Fixed
   rules and risk limits in code decide every order
   ([docs/TRADING_BOT.md](docs/TRADING_BOT.md)).
 - **Bot dashboard** (home page): live account, positions with their protective stops, open and

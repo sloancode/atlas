@@ -8,26 +8,56 @@ explicit decision by the owner and new code.
 ## What it does (owner's choices, 2026-11-27)
 
 Trade often, long **and** short, any liquid US stock, based on news plus price patterns, with
-bigger positions; and trade crypto around the clock. A scheduled Claude session reads the news
-and gathers market data; **fixed code** (`backend/app/services/trading/`) decides which trades
-pass, how big they are, and where the stops go. Claude places exactly those orders.
+bigger positions; trade crypto around the clock; always be ready when a trade shows up; every
+position gets a stop-loss and a take-profit. **Fixed code** (`backend/app/services/trading/`)
+decides which trades pass, how big they are, and where the stops and targets go.
 
-## Schedule
+## How it runs: automatic runner every 5 minutes
 
-One scheduled run every hour at :45 (ET), every day (scheduled tasks can run at most hourly):
+`.github/workflows/bot.yml` runs `python -m app.services.trading.engine --paper` on GitHub
+Actions every 5 minutes, day and night (GitHub sometimes starts scheduled runs a few minutes
+late). Each run:
 
-| When (ET) | What runs |
-|---|---|
-| Mon–Fri 9:45–15:45 | stocks + crypto (7 stock runs a day) |
-| all other hours, including weekends | crypto only |
+1. reads the paper account, positions, orders and equity history;
+2. reads the last hour of Alpaca news and scores it with keyword lists (`news.py`: "beats
+   estimates", "raises guidance", "upgrade" count as good; "misses", "downgrade", "lawsuit",
+   "offering" as bad), from −2 to +2 per symbol;
+3. always: hourly crypto bars for the 12 coins;
+4. when the stock market is open: scans the most active stocks, the biggest movers and stocks
+   in the news (up to 40), with their snapshots, 45 days of daily bars and, where a short could
+   trigger, Alpaca's borrow info;
+5. runs the planner and places its orders; after fills it re-plans and places the follow-ups
+   (crypto stops, newly allowed trades), up to 3 rounds.
 
-Each run starts a new thread in the Claude project and reports there.
+Only one run trades at a time (a workflow concurrency group). Every run's full report (news
+scores, plan, skipped symbols, each order's result) is in the run's log under the repository's
+**Actions** tab. The logs never contain the keys (GitHub hides secrets), but the repository is
+public, so anyone can read the paper account's trades there.
+
+### Setup (once)
+
+GitHub → the repository → **Settings → Secrets and variables → Actions → New repository
+secret**: add `ALPACA_API_KEY_ID` and `ALPACA_API_SECRET_KEY` with the Alpaca **paper** keys.
+Until both exist, each run just prints "No Alpaca keys" and stops.
+
+### Pause, resume, dry run
+
+- Pause: **Actions → Paper trading bot → ⋯ → Disable workflow**. Resume: **Enable workflow**.
+- Dry run (plans, places nothing): **Actions → Paper trading bot → Run workflow**, tick "Plan
+  only".
+- GitHub turns off scheduled workflows in a public repository after 60 days without any commit;
+  the Actions tab then shows a button to turn it back on.
 
 Stocks trade only during regular hours (9:30–16:00). Outside them Alpaca accepts only limit
 orders, stops and brackets don't protect positions, and prices are thin, so the bot holds
-existing stock positions with their broker-side stops instead of trading them.
+existing stock positions with their broker-side orders instead of trading them.
 
-## Each run, step by step
+## Manual / Claude run (backup)
+
+The steps below run the same planner by hand with the Alpaca connector, with Claude reading the
+headlines instead of the keyword list. Don't run this while the automatic runner is enabled.
+
+### Each run, step by step
 
 All data comes from the Alpaca Paper Trading connector. Save each response verbatim as JSON under
 `backend/data/trading/run/` (git-ignored). Large outputs are saved to a tool-results file; copy it.
@@ -151,4 +181,8 @@ scan, so they only come from the scheduled runs. The run log shows plans recorde
 - Free Alpaca data is the IEX feed; prices and volume can differ from the full market feed.
 - Stop orders are stop-market (stocks) or stop-limit (crypto): a gap can fill well past the stop,
   and a stop-limit may not fill at all in a crash.
-- 15-minute runs can miss fast moves between runs; the broker-side stops cover the downside.
+- Runs every ~5 minutes can still miss fast moves in between; the broker-side stop-loss and
+  take-profit orders cover stocks, and crypto stops sit at the broker (crypto take-profit is
+  checked each run).
+- The keyword news score is crude: it can't read context, sarcasm or numbers, so news trades
+  still need the price to agree.

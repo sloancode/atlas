@@ -20,14 +20,14 @@ Shopify, eBay and Autopilot removed from the app; the code remains in git histor
 | Feature | Verification |
 |---|---|
 | Planner: news + pattern stock rules (long/short), crypto rules, risk limits, paper-only guard, plan CLI | 26 tests (2026-11-27) |
-| Scheduled bot run via Claude cloud sessions: hourly at :45 ET, every day (stocks 9:45–15:45 weekdays, crypto always) | new schedule from 2026-11-27; the old trend bot ran hourly 2026-11-23 to 11-26 with 0 orders |
+| Automatic runner on GitHub Actions every 5 minutes (keyword news scoring); the hourly Claude run is the backup | new schedule from 2026-11-27; the old trend bot ran hourly 2026-11-23 to 11-26 with 0 orders |
 | Alpaca paper client (read-only, paper host only, refuses non-paper accounts, no order methods) | mocked-HTTP tests incl. bad keys, live-account refusal, secrets never in responses |
 | Bot API: `/api/bot/overview` (live account + dry-run plan), `/api/bot/rules`, `/api/bot/journal` | 6 tests |
 | Bot dashboard, run log, rules pages; settings show Alpaca status | `pnpm lint`, `pnpm build`, Playwright screenshots on saved real paper-account data, 0 console errors |
 | Research: indicators, market data adapters (Massive/FMP/SEC EDGAR), research page, scanner, watchlists | existing tests (indicators match StockCharts' RSI example) |
 | Env-only secrets, log redaction (incl. Alpaca headers) | tests |
 
-Totals: **66 backend tests passing**, ruff clean, ESLint clean, production build OK.
+Totals: **73 backend tests passing**, ruff clean, ESLint clean, production build OK.
 
 ## Removed (2026-11-26, owner's request)
 
