@@ -81,7 +81,7 @@ def test_momentum_long_bracket_sized_by_risk_and_position_cap():
     assert a.qty == 235 and a.side == "buy" and a.order_class == "bracket"
     assert a.type == "market" and a.time_in_force == "gtc"
     assert a.stop_loss_stop_price == 104.41 and a.take_profit_limit_price == 109.18
-    assert a.client_order_id == "atlasn-entry-AAA-20261130-1100"
+    assert a.client_order_id == "atlasn-entry-ml-AAA-20261130-1100"
     assert "momentum" in a.reason
 
 
@@ -361,7 +361,7 @@ def test_crypto_breakout_buys_on_a_weekend_night_sized_by_caps():
     [a] = acts(plan, "crypto_buy")
     assert a.symbol == "BTC/USD" and a.side == "buy" and a.time_in_force == "gtc"
     assert a.qty == pytest.approx(90.90909, abs=1e-5)  # 10% of equity per coin
-    assert a.client_order_id == "atlasn-entry-BTCUSD-20261128-2200"
+    assert a.client_order_id == "atlasn-entry-cb-BTCUSD-20261128-2200"
     assert "new 24h high" in a.reason
     assert plan.summary["new_trades_blocked"].startswith("outside entry hours")  # stocks only
 

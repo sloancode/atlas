@@ -153,6 +153,29 @@ trading has a real cost built in.
 | Size | stop distance 2 × hourly ATR (2%–8%); ~1% of equity at risk; ≤ 10% of equity per coin; ≤ 30% in crypto; paid from cash |
 | Exits | GTC stop-limit at the stop (placed right after the buy fills); **take-profit** at 2× the stop distance, checked by the planner on the live price each run (Alpaca crypto has no bracket/OCO orders); hourly close below EMA20; bad news |
 
+## Learning from every trade
+
+Every entry is tagged with its signal kind in its `client_order_id`
+(`atlasn-entry-<kind>-<SYMBOL>-<time>`): news long `nl`, news short `ns`, momentum long `ml`,
+momentum short `ms`, crypto breakout `cb`, crypto news `cn`. Each run rebuilds the trade
+history from the last 60 days of filled orders at Alpaca (nothing is stored elsewhere), pairs
+each entry with the fills that closed it, and scores each kind over its last 20 finished trades
+(`learning.py`):
+
+- fewer than 5 finished trades: full size while it learns;
+- otherwise size = 1 + (average return % ÷ 2), kept between 0.25× and 1×. A kind averaging
+  −1% per trade trades at half size; −1.5% or worse at a quarter; break-even or better at full.
+- kinds with a better record are ranked first when slots are scarce.
+
+Losing kinds never drop to zero, so they keep being tested and can earn their size back.
+Winning kinds don't go above full size, because the owner-approved limits (1% risk per trade,
+25% per position) stay hard caps. Each run's report shows the scores under `learning`.
+
+This is learning in a narrow, honest sense: the bot shifts money toward the kinds of trades
+that have been working on this account. It doesn't invent new strategies, and with only a
+handful of trades the scores are mostly noise, which is why 5 trades are needed before it
+acts on them.
+
 ## Risk limits (whole account, enforced in code)
 
 - ~1% of equity at risk per new trade (a gap through the stop can lose more)

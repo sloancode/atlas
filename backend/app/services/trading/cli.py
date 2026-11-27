@@ -24,6 +24,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from app.services.trading.config import DEFAULT
+from app.services.trading.learning import learn
 from app.services.trading.planner import (
     ET,
     Asset,
@@ -235,12 +237,16 @@ def state_from_responses(
         for o in _flatten_orders(_list(open_orders, "orders", "result"))
         if str(o.get("status", "new")).lower() not in ("filled", "canceled", "expired", "rejected")
     ]
+    closed_raw = _flatten_orders(_list(closed_orders, "orders", "result"))
     closed = [
         ClosedOrder(
             o["symbol"], str(o["side"]).lower(), _dt(o.get("filled_at")), o.get("client_order_id")
         )
-        for o in _flatten_orders(_list(closed_orders, "orders", "result"))
+        for o in closed_raw
     ]
+    size_mult, learning = learn(
+        closed_raw, DEFAULT.order_prefix, DEFAULT.learn_window, DEFAULT.learn_min_trades
+    )
     hist = history or {}
     snaps, skipped = parse_snapshots(snapshots, today)
     state = State(
@@ -260,6 +266,8 @@ def state_from_responses(
         assets=parse_assets(assets),
         cash=float(account.get("non_marginable_buying_power") or account.get("cash") or 0),
         crypto_bars=parse_crypto_bars(crypto_bars),
+        size_mult=size_mult,
+        learning=learning,
     )
     return state, skipped
 
