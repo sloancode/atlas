@@ -186,10 +186,13 @@ def plan_crypto(
             )
             if x
         )
-        signals.append((2 * score + int(breakout), pair, last, _stop_dist(b, last, cfg), why))
+        kind = "cn" if score >= cfg.min_news_score else "cb"  # for learning.py
+        mult = st.size_mult.get(kind, 1.0)
+        strength = (2 * score + int(breakout)) * mult
+        signals.append((strength, pair, last, _stop_dist(b, last, cfg), why, kind, mult))
     signals.sort(key=lambda s: s[0], reverse=True)
 
-    for _, pair, last, dist, why in signals:
+    for _, pair, last, dist, why, kind, mult in signals:
         reason = risk_block
         if not reason and room["open_slots"] <= 0:
             reason = f"max {cfg.max_positions} positions"
@@ -200,7 +203,7 @@ def plan_crypto(
             eq = st.equity
             qty = _floor6(
                 min(
-                    eq * cfg.risk_per_trade_pct / 100 / dist,
+                    eq * cfg.risk_per_trade_pct * mult / 100 / dist,
                     eq * cfg.crypto_max_position_pct / 100 / last,
                     max(eq * cfg.crypto_max_total_pct / 100 - crypto_value, 0) / last,
                     max(eq * cfg.max_gross_pct / 100 - room["gross"], 0) / last,
@@ -217,12 +220,13 @@ def plan_crypto(
             Action(
                 "crypto_buy",
                 pair,
-                f"{why}; ~${value:,.0f}, stop ~{dist / last * 100:.1f}% away",
+                f"{why}; ~${value:,.0f}, stop ~{dist / last * 100:.1f}% away"
+                + (f"; size x{mult:g} from this signal's track record" if mult < 1 else ""),
                 side="buy",
                 qty=qty,
                 type="market",
                 time_in_force="gtc",
-                client_order_id=_cid(cfg, now_et, "entry", tag(pair)),
+                client_order_id=_cid(cfg, now_et, f"entry-{kind}", tag(pair)),
             )
         )
         crypto_value += value

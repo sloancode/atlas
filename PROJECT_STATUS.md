@@ -27,7 +27,7 @@ Shopify, eBay and Autopilot removed from the app; the code remains in git histor
 | Research: indicators, market data adapters (Massive/FMP/SEC EDGAR), research page, scanner, watchlists | existing tests (indicators match StockCharts' RSI example) |
 | Env-only secrets, log redaction (incl. Alpaca headers) | tests |
 
-Totals: **73 backend tests passing**, ruff clean, ESLint clean, production build OK.
+Totals: **78 backend tests passing**, ruff clean, ESLint clean, production build OK.
 
 ## Removed (2026-11-26, owner's request)
 

@@ -45,12 +45,25 @@ class BotConfig:
     first_entry_et: str = "09:45"
     last_entry_et: str = "15:30"  # no new entries in the last half hour
     order_prefix: str = "atlasn"
+    # --- Learning (learning.py): size each signal kind by its last finished trades ---
+    learn_window: int = 20  # most recent finished trades per kind that count
+    learn_min_trades: int = 5  # below this, a kind trades at full size while it learns
     # --- Crypto, around the clock (owner asked to trade all hours, 2026-11-27) ---
     # Alpaca crypto is long-only and cash-only (no shorting, no margin); fees ~0.15-0.25%/side.
     crypto_pairs: tuple[str, ...] = (
-        "BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "DOGE/USD", "AVAX/USD", "LINK/USD",
-        "LTC/USD", "BCH/USD", "DOT/USD", "UNI/USD", "AAVE/USD",
-    )  # fmt: skip
+        "BTC/USD",
+        "ETH/USD",
+        "SOL/USD",
+        "XRP/USD",
+        "DOGE/USD",
+        "AVAX/USD",
+        "LINK/USD",
+        "LTC/USD",
+        "BCH/USD",
+        "DOT/USD",
+        "UNI/USD",
+        "AAVE/USD",
+    )
     crypto_max_position_pct: float = 10.0  # of equity, per coin
     crypto_max_total_pct: float = 30.0  # of equity, all coins together
     crypto_ema_fast: int = 20  # hourly bars

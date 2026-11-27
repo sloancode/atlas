@@ -114,6 +114,8 @@ class State:
     assets: dict[str, Asset] = field(default_factory=dict)
     cash: float | None = None  # non-marginable buying power (crypto is cash-only)
     crypto_bars: dict[str, pd.DataFrame] = field(default_factory=dict)  # "BTC/USD" -> hourly
+    size_mult: dict[str, float] = field(default_factory=dict)  # learning.py, by signal kind
+    learning: dict = field(default_factory=dict)  # learning report, shown in the summary
 
 
 @dataclass
@@ -455,7 +457,12 @@ def make_plan(st: State, cfg: BotConfig = DEFAULT) -> Plan:
             )
             continue
         signals.append(sig)
-    signals.sort(key=lambda s: s.strength, reverse=True)
+
+    def code(sig: Signal) -> str:  # signal kind for learning.py
+        return ("n" if sig.news else "m") + ("l" if sig.direction == "long" else "s")
+
+    # Kinds with a better track record rank first (learning.py)
+    signals.sort(key=lambda s: s.strength * st.size_mult.get(code(s), 1.0), reverse=True)
 
     # 4) Entries
     bp = st.buying_power
@@ -466,10 +473,11 @@ def make_plan(st: State, cfg: BotConfig = DEFAULT) -> Plan:
         if not reason and entries_today >= cfg.max_new_trades_per_day:
             reason = f"max {cfg.max_new_trades_per_day} new trades today"
         qty = 0
+        mult = st.size_mult.get(code(sig), 1.0)
         if not reason:
             room = st.equity * cfg.max_gross_pct / 100 - gross
             qty = min(
-                math.floor(st.equity * cfg.risk_per_trade_pct / 100 / sig.stop_dist),
+                math.floor(st.equity * cfg.risk_per_trade_pct * mult / 100 / sig.stop_dist),
                 math.floor(st.equity * cfg.max_position_pct / 100 / sig.last),
                 math.floor(max(room, 0) / sig.last),
                 math.floor(max(bp, 0) * 0.95 / sig.last),
@@ -493,7 +501,8 @@ def make_plan(st: State, cfg: BotConfig = DEFAULT) -> Plan:
             Action(
                 "buy" if long else "short",
                 sig.symbol,
-                f"{sig.why}; ~${value:,.0f}, risk ~${qty * sig.stop_dist:,.0f}",
+                f"{sig.why}; ~${value:,.0f}, risk ~${qty * sig.stop_dist:,.0f}"
+                + (f"; size x{mult:g} from this signal's track record" if mult < 1 else ""),
                 side="buy" if long else "sell",
                 qty=qty,
                 type="market",
@@ -501,7 +510,7 @@ def make_plan(st: State, cfg: BotConfig = DEFAULT) -> Plan:
                 order_class="bracket",
                 stop_loss_stop_price=round(stop, 2),
                 take_profit_limit_price=round(target, 2),
-                client_order_id=_cid(cfg, now_et, "entry", sig.symbol),
+                client_order_id=_cid(cfg, now_et, f"entry-{code(sig)}", sig.symbol),
             )
         )
         gross += value
@@ -530,5 +539,6 @@ def make_plan(st: State, cfg: BotConfig = DEFAULT) -> Plan:
         "candidates_scanned": len(st.snapshots),
         "signals": [f"{s.direction} {s.symbol}" for s in signals],
         "crypto": crypto_summary,
+        "learning": st.learning,
     }
     return plan

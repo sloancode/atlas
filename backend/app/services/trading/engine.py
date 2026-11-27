@@ -109,19 +109,34 @@ class PaperBroker:
 # ---------- data gathering ----------
 
 
+def closed_orders(b: PaperBroker, now: datetime, days: int = 60) -> list[dict]:
+    """Closed orders of the last `days` days (oldest first), for the limits and learning."""
+    out: list[dict] = []
+    after = (now - timedelta(days=days)).isoformat()
+    for _ in range(20):
+        params = {
+            "status": "closed",
+            "limit": 500,
+            "after": after,
+            "direction": "asc",
+            "nested": "true",
+        }
+        page = b.get(ALPACA_PAPER_BASE_URL, "/v2/orders", params)
+        out.extend(page)
+        if len(page) < 500:
+            break
+        after = page[-1]["submitted_at"]
+    return out
+
+
 def broker_state(b: PaperBroker, now: datetime) -> dict:
-    after = (now - timedelta(days=8)).isoformat()
     return {
         "account": b.account(),
         "positions": b.get(ALPACA_PAPER_BASE_URL, "/v2/positions"),
         "open_orders": b.get(
             ALPACA_PAPER_BASE_URL, "/v2/orders", {"status": "open", "limit": 500, "nested": "true"}
         ),
-        "closed_orders": b.get(
-            ALPACA_PAPER_BASE_URL,
-            "/v2/orders",
-            {"status": "closed", "limit": 500, "after": after, "nested": "true"},
-        ),
+        "closed_orders": closed_orders(b, now),
         "history": b.get(
             ALPACA_PAPER_BASE_URL,
             "/v2/account/portfolio/history",
