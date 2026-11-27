@@ -357,9 +357,15 @@ def make_plan(st: State, cfg: BotConfig = DEFAULT) -> Plan:
         stop = p.avg_entry_price * (
             1 - cfg.fallback_stop_pct / 100 if long else 1 + cfg.fallback_stop_pct / 100
         )
+        move = cfg.target_r * cfg.fallback_stop_pct / 100
+        target = p.avg_entry_price * (1 + move if long else 1 - move)
         breached = p.current_price <= stop if long else p.current_price >= stop
         if breached:
             close(p, f"no stop and already past the {cfg.fallback_stop_pct:g}% stop level")
+            exiting.add(sym)
+            continue
+        if p.current_price >= target if long else p.current_price <= target:
+            close(p, f"no stop and already past its {move * 100:g}% profit target")
             exiting.add(sym)
             continue
         for o in by_symbol.get(sym, []):
@@ -368,12 +374,15 @@ def make_plan(st: State, cfg: BotConfig = DEFAULT) -> Plan:
             Action(
                 "stop",
                 sym,
-                f"position had no stop: {cfg.fallback_stop_pct:g}% from entry",
+                f"position had no stop: stop-loss {cfg.fallback_stop_pct:g}% and take-profit "
+                f"{move * 100:g}% from entry (one cancels the other)",
                 side=protect_side,
                 qty=int(abs(p.qty)),
-                type="stop",
+                type="limit",
                 time_in_force="gtc",
-                stop_price=round(stop, 2),
+                order_class="oco",
+                stop_loss_stop_price=round(stop, 2),
+                take_profit_limit_price=round(target, 2),
                 client_order_id=_cid(cfg, now_et, "stop", sym),
             )
         )

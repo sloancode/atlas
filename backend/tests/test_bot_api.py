@@ -64,9 +64,10 @@ def test_overview_runs_dry_plan_and_hides_secrets(alpaca_settings: Settings) -> 
     body = resp.json()
     assert body["configured"] is True
     assert body["plan_error"] is None
-    # short position without a stop gets a buy-stop 5% above entry (dry run only)
+    # short position without a stop gets an OCO: stop 5% above, target 10% below entry
     [a] = body["plan"]["actions"]
-    assert (a["action"], a["symbol"], a["side"], a["stop_price"]) == ("stop", "TSLA", "buy", 420.0)
+    assert (a["action"], a["symbol"], a["side"], a["order_class"]) == ("stop", "TSLA", "buy", "oco")
+    assert (a["stop_loss_stop_price"], a["take_profit_limit_price"]) == (420.0, 360.0)
     assert body["plan"]["summary"]["shorts"] == 1
     assert body["equity_history"][0]["equity"] == 100000
 

@@ -195,7 +195,8 @@ def test_stale_short_is_covered_and_unprotected_short_gets_buy_stop():
     [c] = acts(plan, "cover")
     assert c.symbol == "OLD" and c.side == "buy" and c.qty == 20
     [st] = acts(plan, "stop")
-    assert (st.symbol, st.side, st.stop_price, st.time_in_force) == ("NEW", "buy", 210.0, "gtc")
+    assert (st.symbol, st.side, st.order_class, st.time_in_force) == ("NEW", "buy", "oco", "gtc")
+    assert (st.stop_loss_stop_price, st.take_profit_limit_price) == (210.0, 180.0)
 
 
 def test_protected_position_left_alone_and_breached_unprotected_closed():
@@ -386,7 +387,7 @@ def test_crypto_respects_total_cap_and_daily_loss_cap():
 
 def test_crypto_holdings_managed_and_ignored_by_stock_rules():
     pos = [
-        Position("BTCUSD", 0.5, 100.0, 110.0, "long", "crypto"),  # no stop -> stop-limit
+        Position("BTCUSD", 0.5, 100.0, 101.0, "long", "crypto"),  # no stop -> stop-limit
         Position("ETHUSD", 2.0, 100.0, 95.0, "long", "crypto"),  # below EMA20 -> sell
         Position("SOLUSD", 3.0, 100.0, 110.0, "long", "crypto"),  # bad news -> sell
     ]
@@ -405,6 +406,18 @@ def test_crypto_holdings_managed_and_ignored_by_stock_rules():
     sells = {a.symbol: a for a in acts(plan, "crypto_sell")}
     assert set(sells) == {"ETH/USD", "SOL/USD"} and "trend exit" in sells["ETH/USD"].reason
     assert ("cancel", "SOL/USD") in kinds
+
+
+def test_crypto_take_profit_and_stop_level_use_live_price():
+    pos = [
+        Position("BTCUSD", 0.5, 100.0, 106.0, "long", "crypto"),  # >= 100 + 2 x 2.0 -> sell
+        Position("ETHUSD", 2.0, 100.0, 97.0, "long", "crypto"),  # live price under stop 98
+    ]
+    plan = make_plan(crypto_state({"BTC/USD": hourly(), "ETH/USD": hourly()}, positions=pos))
+    sells = {a.symbol: a.reason for a in acts(plan, "crypto_sell")}
+    assert "take profit" in sells["BTC/USD"]
+    assert "below its stop level" in sells["ETH/USD"]  # no stop placed above the market
+    assert acts(plan, "crypto_stop") == []
 
 
 def test_cli_parses_crypto_positions_and_bars():

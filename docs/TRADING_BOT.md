@@ -36,8 +36,9 @@ All data comes from the Alpaca Paper Trading connector. Save each response verba
 2. Always fetch: `get_account_info` → `account.json`; `get_all_positions` → `positions.json`;
    `get_orders status=open` → `open.json`; `get_orders status=closed, after = now − 8 days,
    limit 500` → `closed.json`; `get_portfolio_history period=3M timeframe=1D` → `history.json`;
-   `get_crypto_bars symbols=<the 12 crypto_pairs in config.py> timeframe=1Hour days=4
-   limit=10000` → `crypto.json`.
+   `get_crypto_bars symbols=<one pair> timeframe=1Hour days=4 limit=1000` for **each** of the 12
+   `crypto_pairs` in config.py, **one pair per call** (asking for all at once returns partial
+   data), combined into one file `crypto.json` as `{"bars": {"BTC/USD": [...], ...}}`.
 3. News: `get_news` for the last 60 minutes (limit 50, up to 3 pages), plus `get_news
    symbols=<held symbols and crypto pairs>` for the last 60 minutes.
 4. **Only if the stock market is open:**
@@ -75,15 +76,17 @@ All data comes from the Alpaca Paper Trading connector. Save each response verba
    | `cancel` | `cancel_order_by_id(order_id)` (an "already canceled/filled" error is fine) |
    | `buy`, `short` | `place_stock_order(symbol, side, qty, type=market, time_in_force=gtc, order_class=bracket, stop_loss_stop_price, take_profit_limit_price, client_order_id)` |
    | `sell`, `cover` | `place_stock_order(symbol, side, qty, type=market, time_in_force=day, client_order_id)` |
-   | `stop` | `place_stock_order(symbol, side, qty, type=stop, stop_price, time_in_force=gtc, client_order_id)` |
+   | `stop` | `place_stock_order(symbol, side, qty, type=limit, order_class=oco, take_profit_limit_price, stop_loss_stop_price, time_in_force=gtc, client_order_id)` (stop-loss and take-profit; one cancels the other) |
    | `crypto_buy`, `crypto_sell` | `place_crypto_order(symbol, side, qty, type=market, time_in_force=gtc, client_order_id)` |
    | `crypto_stop` | `place_crypto_order(symbol, side=sell, qty, type=stop_limit, stop_price, limit_price, time_in_force=gtc, client_order_id)` |
 
    Pass numbers as strings exactly as printed. A duplicate `client_order_id` error means the
    order already exists: don't retry with a new id.
-8. If any `crypto_buy` was placed: check it filled, re-fetch `positions.json` and `open.json`,
-   rerun step 6, and execute **only** its `crypto_stop`/`stop` actions and the `cancel` actions
-   whose reason is "replace with a full stop". (Stock entries carry their stop in the bracket.)
+8. If any order was placed: wait until it fills (check `get_orders`), re-fetch `account.json`,
+   `positions.json`, `open.json` and `closed.json`, rerun step 6 and execute **its whole plan**
+   the same way (this places the stops for new crypto buys, and any trade that became allowed).
+   Repeat at most 3 times per run. The planner sees open orders and positions, so it won't
+   double up; a repeated `client_order_id` is rejected by Alpaca.
 9. Friday's 15:45 run also reports the weekly scorecard: the account's % change for the week
    (`get_portfolio_history period=1W timeframe=1D`) next to SPY's % change over the same days.
 10. Reply with a short report: equity, today's %, each order placed with its fill price/status
@@ -105,7 +108,7 @@ planner's. If anything looks wrong (non-paper account, unexpected error), place 
 | Ranking | 2 × \|news score\| + checks passed |
 | Entry order | market, GTC bracket: stop 0.5 × daily ATR away (clamped 1.5%–6%), take-profit at 2× that distance |
 | Size | the smallest of: stop loses ~1% of equity; 25% of equity; room under 150% gross exposure; 95% of buying power |
-| Exits | bracket stop/target; news turns against the position; held ≥ 3 days and not up ≥ 1%; a position with no stop gets one 5% from entry (or is closed if already past that) |
+| Exits | bracket stop/target; news turns against the position; held ≥ 3 days and not up ≥ 1%; a position with no stop gets an OCO stop-loss 5% / take-profit 10% from entry (or is closed if already past either) |
 | Hours | new stock trades 9:45–15:30 ET |
 
 ## Crypto rules (around the clock)
@@ -118,7 +121,7 @@ trading has a real cost built in.
 | Coins | BTC, ETH, SOL, XRP, DOGE, AVAX, LINK, LTC, BCH, DOT, UNI, AAVE (vs USD) |
 | Buy | hourly close > EMA20 > EMA50, plus a new 24-hour high or news ≥ +1; skipped on bad news or after a 20%+ day |
 | Size | stop distance 2 × hourly ATR (2%–8%); ~1% of equity at risk; ≤ 10% of equity per coin; ≤ 30% in crypto; paid from cash |
-| Exits | GTC stop-limit at the stop (placed right after the buy fills); hourly close below EMA20; bad news |
+| Exits | GTC stop-limit at the stop (placed right after the buy fills); **take-profit** at 2× the stop distance, checked by the planner on the live price each run (Alpaca crypto has no bracket/OCO orders); hourly close below EMA20; bad news |
 
 ## Risk limits (whole account, enforced in code)
 
