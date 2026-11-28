@@ -5,7 +5,8 @@ name: Paper trading bot
 
 on:
   schedule:
-    - cron: "*/5 * * * *"  # GitHub may start scheduled runs a few minutes late
+    # Off the busy :00/:05 marks, which GitHub often skips when it is overloaded.
+    - cron: "3-58/5 * * * *"  # GitHub may still start scheduled runs late or drop some
   workflow_dispatch:
     inputs:
       dry_run:
